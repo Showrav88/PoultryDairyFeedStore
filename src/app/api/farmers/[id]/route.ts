@@ -107,13 +107,13 @@ export async function DELETE(
 
   const existing = await prisma.farmer.findFirst({
     where: { id, shopId: session.shopId },
-    include: { sales: { where: { dueAmount: { gt: 0 } }, take: 1 } },
   });
   if (!existing) return NextResponse.json({ error: "Farmer not found" }, { status: 404 });
 
-  if (existing.sales.length > 0 || Number(existing.openingDue) > 0) {
+  const balance = await getFarmerBalance(session.shopId, id);
+  if (balance.totalDue > 0) {
     return NextResponse.json(
-      { error: "Cannot delete farmer with outstanding due balance" },
+      { error: "Cannot delete farmer until all due balance is cleared (collect payments or set opening due to 0)" },
       { status: 400 }
     );
   }

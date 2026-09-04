@@ -112,6 +112,8 @@ export const messages = {
       daysOverdue: "days overdue",
       profile: "Farmer Profile",
       sellFromFarmers: "Select farmer then sell feed on credit or cash",
+      cannotDeleteWithDue: "Cannot delete — clear all due balance first",
+      deleteFarmer: "Delete Farmer",
     },
     purchases: {
       title: "Purchases",
@@ -308,6 +310,8 @@ export const messages = {
       daysOverdue: "দিন বাকি",
       profile: "কৃষক প্রোফাইল",
       sellFromFarmers: "কৃষক বেছে নিন — নগদ বা বাকিতে ফিড বিক্রি",
+      cannotDeleteWithDue: "মুছতে পারবেন না — আগে সব বাকি পরিশোধ করুন",
+      deleteFarmer: "কৃষক মুছুন",
     },
     purchases: {
       title: "ক্রয়",
