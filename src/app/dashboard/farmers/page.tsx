@@ -191,9 +191,15 @@ export default function FarmersPage() {
                 <Button size="sm" variant="outline" onClick={() => openEdit(f)} title={t.common.edit}>
                   <Pencil size={14} />
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleDelete(f)} title={t.common.delete}>
-                  <Trash2 size={14} className="text-red-500" />
-                </Button>
+                {f.totalDue <= 0 ? (
+                  <Button size="sm" variant="outline" onClick={() => handleDelete(f)} title={t.farmers.deleteFarmer}>
+                    <Trash2 size={14} className="text-red-500" />
+                  </Button>
+                ) : (
+                  <span className="self-center text-xs text-gray-500" title={t.farmers.cannotDeleteWithDue}>
+                    🔒
+                  </span>
+                )}
               </div>
             </div>
           </div>
