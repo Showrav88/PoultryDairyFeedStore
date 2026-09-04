@@ -31,6 +31,7 @@ export default function PurchasesPage() {
   const [showForm, setShowForm] = useState(false);
   const [buyerId, setBuyerId] = useState("");
   const [buyerSearch, setBuyerSearch] = useState("");
+  const [selectedBuyerData, setSelectedBuyerData] = useState<Buyer | null>(null);
   const [paidAmount, setPaidAmount] = useState(0);
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,12 +55,14 @@ export default function PurchasesPage() {
   }, [searchBuyers]);
 
   useEffect(() => {
+    if (buyerId) return;
     const timer = setTimeout(() => searchBuyers(buyerSearch), 300);
     return () => clearTimeout(timer);
-  }, [buyerSearch, searchBuyers]);
+  }, [buyerSearch, searchBuyers, buyerId]);
 
   const selectBuyer = (buyer: Buyer) => {
     setBuyerId(buyer.id);
+    setSelectedBuyerData(buyer);
     setBuyerSearch(`${buyer.name} (${buyer.phone})`);
   };
 
@@ -93,6 +96,7 @@ export default function PurchasesPage() {
         setItems([]);
         setBuyerId("");
         setBuyerSearch("");
+        setSelectedBuyerData(null);
         setPaidAmount(0);
         loadPurchases();
       } catch (err) {
@@ -126,15 +130,14 @@ export default function PurchasesPage() {
     }, { message: `Update paid amount to ${formatCurrency(editPaidAmount)}?` });
   };
 
-  const selectedBuyer = buyers.find((b) => b.id === buyerId);
-  const buyerSuggestions = buyerSearch
+  const selectedBuyer = selectedBuyerData ?? buyers.find((b) => b.id === buyerId) ?? null;
+  const buyerSuggestions = buyerSearch && !buyerId
     ? buyers.filter(
         (b) =>
-          b.id !== buyerId &&
-          (b.name.toLowerCase().includes(buyerSearch.toLowerCase()) ||
-            b.phone.includes(buyerSearch.replace(/\D/g, "")))
+          b.name.toLowerCase().includes(buyerSearch.toLowerCase()) ||
+          b.phone.includes(buyerSearch.replace(/\D/g, ""))
       )
-    : buyers;
+    : [];
 
   return (
     <div>
@@ -161,6 +164,7 @@ export default function PurchasesPage() {
                 onChange={(e) => {
                   setBuyerSearch(e.target.value);
                   setBuyerId("");
+                  setSelectedBuyerData(null);
                 }}
                 className="mb-2"
               />
@@ -169,7 +173,7 @@ export default function PurchasesPage() {
                   Selected: {selectedBuyer.name} ({selectedBuyer.phone})
                 </p>
               )}
-              {buyerSuggestions.length > 0 && !selectedBuyer && buyerSearch && (
+              {buyerSuggestions.length > 0 && !buyerId && buyerSearch && (
                 <div className="absolute z-20 max-h-48 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
                   {buyerSuggestions.map((b) => (
                     <button
@@ -184,7 +188,7 @@ export default function PurchasesPage() {
                   ))}
                 </div>
               )}
-              {buyerSearch && buyerSuggestions.length === 0 && (
+              {buyerSearch && !buyerId && buyerSuggestions.length === 0 && (
                 <p className="text-xs text-orange-600">No buyer found. Add buyer first in Buyers page.</p>
               )}
             </div>
