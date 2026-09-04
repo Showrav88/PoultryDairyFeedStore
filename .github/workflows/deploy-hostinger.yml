@@ -13,6 +13,26 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate deployment secrets
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          missing=()
+          [ -z "$VPS_HOST" ] && missing+=("VPS_HOST")
+          [ -z "$VPS_USER" ] && missing+=("VPS_USER")
+          [ -z "$VPS_SSH_KEY" ] && missing+=("VPS_SSH_KEY")
+          [ -z "$VPS_KNOWN_HOSTS" ] && missing+=("VPS_KNOWN_HOSTS")
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing GitHub Actions secrets: ${missing[*]}"
+            echo "Run on VPS: sudo bash /var/www/NEWPROJECT/deploy/setup-github-actions-deploy.sh"
+            echo "Then add the printed values in GitHub → Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
       - name: Configure SSH
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -24,10 +44,14 @@ jobs:
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Deploy main
+      - name: Deploy main to VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          ssh -o BatchMode=yes "$VPS_USER@$VPS_HOST" \
+          set -euo pipefail
+          echo "Deploying commit ${GITHUB_SHA} to ${VPS_USER}@${VPS_HOST}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
             "sudo /usr/local/sbin/deploy-newproject"
+          echo "Deploy finished successfully."
