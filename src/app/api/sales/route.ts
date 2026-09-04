@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
 import { deductStock } from "@/lib/inventory/khucra";
+import { computeLineProfit } from "@/lib/inventory/avg-cost";
 
 const saleSchema = z.object({
   customerName: z.string().optional(),
@@ -72,6 +73,9 @@ export async function POST(request: Request) {
         const product = productMap.get(item.productId)!;
         const totalQty = item.quantityInSmallestUnit * item.unitCount;
         const lineTotal = item.pricePerUnit * item.unitCount;
+        const costPerUnit = Number(product.avgCostPerSmallestUnit);
+        const { costTotal, profit } = computeLineProfit(totalQty, lineTotal, costPerUnit);
+
         return {
           productId: item.productId,
           quantityInSmallestUnit: totalQty,
@@ -83,10 +87,15 @@ export async function POST(request: Request) {
           pricePerUnit: item.pricePerUnit,
           lineTotal,
           unitCount: item.unitCount,
+          costPerSmallestUnit: costPerUnit,
+          costTotal,
+          profit,
         };
       });
 
       const totalAmount = lineItems.reduce((s, i) => s + i.lineTotal, 0);
+      const totalCost = lineItems.reduce((s, i) => s + i.costTotal, 0);
+      const totalProfit = lineItems.reduce((s, i) => s + i.profit, 0);
       const dueAmount = Math.max(0, totalAmount - data.paidAmount);
       const status = calcPaymentStatus(totalAmount, data.paidAmount);
 
@@ -96,6 +105,8 @@ export async function POST(request: Request) {
           customerName: data.customerName,
           customerPhone: data.customerPhone,
           totalAmount,
+          totalCost,
+          totalProfit,
           paidAmount: data.paidAmount,
           dueAmount,
           status,

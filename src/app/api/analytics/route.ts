@@ -30,31 +30,35 @@ export async function GET(request: Request) {
   });
 
   const totalRevenue = sales.reduce((s, sale) => s + Number(sale.totalAmount), 0);
+  const totalCost = sales.reduce((s, sale) => s + Number(sale.totalCost), 0);
+  const totalProfit = sales.reduce((s, sale) => s + Number(sale.totalProfit), 0);
   const totalPaid = sales.reduce((s, sale) => s + Number(sale.paidAmount), 0);
   const totalDue = sales.reduce((s, sale) => s + Number(sale.dueAmount), 0);
 
-  const productSales: Record<string, { name: string; qty: number; revenue: number }> = {};
+  const productSales: Record<string, { name: string; qty: number; revenue: number; profit: number }> = {};
   for (const sale of sales) {
     for (const item of sale.items) {
       const key = item.productId;
       if (!productSales[key]) {
-        productSales[key] = { name: item.product.name, qty: 0, revenue: 0 };
+        productSales[key] = { name: item.product.name, qty: 0, revenue: 0, profit: 0 };
       }
       productSales[key].qty += item.quantityInSmallestUnit;
       productSales[key].revenue += Number(item.lineTotal);
+      productSales[key].profit += Number(item.profit);
     }
   }
 
   const ranked = Object.values(productSales).sort((a, b) => b.revenue - a.revenue);
+  const profitRanked = Object.values(productSales).sort((a, b) => b.profit - a.profit);
 
   const products = await prisma.product.findMany({
     where: { shopId: session.shopId, isActive: true },
   });
 
-  const inventoryValue = products.reduce(
-    (s, p) => s + (p.stockInSmallestUnit / p.basePackageSize) * Number(p.sellPrice),
-    0
-  );
+  const inventoryValue = products.reduce((s, p) => {
+    const avgCost = Number(p.avgCostPerSmallestUnit);
+    return s + p.stockInSmallestUnit * avgCost;
+  }, 0);
 
   const logs = await prisma.auditLog.findMany({
     where: { shopId: session.shopId },
@@ -65,10 +69,13 @@ export async function GET(request: Request) {
   return NextResponse.json({
     period,
     totalRevenue,
+    totalCost,
+    totalProfit,
     totalPaid,
     totalDue,
     saleCount: sales.length,
     topProducts: ranked.slice(0, 5),
+    topProfitProducts: profitRanked.slice(0, 5),
     lowProducts: ranked.slice(-5).reverse(),
     inventoryValue,
     logs,

@@ -53,8 +53,11 @@ model Product {
   // Package size in smallest unit (grams/ml). e.g. 50kg bag = 50000
   basePackageSize Int @default(1000)
 
-  // Reference sell price (analytics only, not used at sell time)
+  // Suggested sell price only — cashier enters real price on sell counter
   sellPrice Decimal @default(0) @db.Decimal(12, 2)
+
+  // Weighted average buy cost per gram/ml/piece (updated on each purchase)
+  avgCostPerSmallestUnit Decimal @default(0) @db.Decimal(12, 6)
 
   // Allowed khucra sell units in smallest unit, e.g. [100, 250, 500, 1000, 50000]
   allowedSellUnits Int[] @default([100, 250, 500, 1000])
@@ -148,6 +151,8 @@ model Sale {
   customerName  String?
   customerPhone String?
   totalAmount   Decimal       @db.Decimal(12, 2)
+  totalCost     Decimal       @default(0) @db.Decimal(12, 2)
+  totalProfit   Decimal       @default(0) @db.Decimal(12, 2)
   paidAmount    Decimal       @default(0) @db.Decimal(12, 2)
   dueAmount     Decimal       @default(0) @db.Decimal(12, 2)
   status        PaymentStatus @default(PAID)
@@ -174,6 +179,9 @@ model SaleItem {
   sellUnitLabel    String
   pricePerUnit     Decimal @db.Decimal(12, 2)
   lineTotal        Decimal @db.Decimal(12, 2)
+  costPerSmallestUnit Decimal @default(0) @db.Decimal(12, 6)
+  costTotal        Decimal @default(0) @db.Decimal(12, 2)
+  profit           Decimal @default(0) @db.Decimal(12, 2)
   // How many "units" at pricePerUnit (e.g. 1 for one 250g portion)
   unitCount        Int     @default(1)
 

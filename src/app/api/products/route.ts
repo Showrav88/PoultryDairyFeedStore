@@ -5,51 +5,20 @@ import { prisma } from "@/lib/db";
 import { generateProductId } from "@/lib/utils";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
+import { formatAvgCostPerKg } from "@/lib/inventory/avg-cost";
 import { formatStockDisplay } from "@/lib/inventory/sell-units";
 
-async function getAvgCostPerSmallestUnit(productIds: string[]) {
-  if (productIds.length === 0) return new Map<string, number>();
-
-  const items = await prisma.purchaseItem.findMany({
-    where: { productId: { in: productIds } },
-    select: {
-      productId: true,
-      quantity: true,
-      costPriceTotal: true,
-      product: { select: { basePackageSize: true } },
-    },
-  });
-
-  const totals = new Map<string, { cost: number; units: number }>();
-  for (const item of items) {
-    const units = item.quantity * item.product.basePackageSize;
-    if (units <= 0) continue;
-    const cur = totals.get(item.productId) ?? { cost: 0, units: 0 };
-    cur.cost += Number(item.costPriceTotal);
-    cur.units += units;
-    totals.set(item.productId, cur);
-  }
-
-  const result = new Map<string, number>();
-  for (const [id, { cost, units }] of totals) {
-    if (units > 0) result.set(id, cost / units);
-  }
-  return result;
-}
-
-function enrichProduct(
-  p: {
-    id: string;
-    stockInSmallestUnit: number;
-    closedPackages: number;
-    openPackageRemaining: number;
-    basePackageSize: number;
-    sellPrice: unknown;
-    weightUnit: string;
-    [key: string]: unknown;
-  },
-  avgCostPerUnit: number | undefined
-) {
+function enrichProduct(p: {
+  stockInSmallestUnit: number;
+  closedPackages: number;
+  openPackageRemaining: number;
+  basePackageSize: number;
+  sellPrice: unknown;
+  avgCostPerSmallestUnit: unknown;
+  weightUnit: string;
+  [key: string]: unknown;
+}) {
+  const avgCost = Number(p.avgCostPerSmallestUnit);
   const inventory = getInventorySummary({
     stockInSmallestUnit: p.stockInSmallestUnit,
     closedPackages: p.closedPackages,
@@ -59,6 +28,7 @@ function enrichProduct(
   return {
     ...p,
     sellPrice: Number(p.sellPrice),
+    suggestedSellPrice: Number(p.sellPrice),
     inventory: {
       ...inventory,
       formattedTotal: formatStockDisplay(
@@ -66,10 +36,10 @@ function enrichProduct(
         p.weightUnit,
         p.basePackageSize
       ),
-      avgCostPerSmallestUnit: avgCostPerUnit ?? null,
+      avgCostPerSmallestUnit: avgCost > 0 ? avgCost : null,
       formattedAvgCostPerKg:
-        avgCostPerUnit && (p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG")
-          ? `৳${((avgCostPerUnit * 1000).toFixed(2))}/kg`
+        avgCost > 0 && (p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG")
+          ? formatAvgCostPerKg(avgCost)
           : null,
     },
   };
@@ -84,8 +54,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const avgCosts = await getAvgCostPerSmallestUnit(products.map((p) => p.id));
-  const enriched = products.map((p) => enrichProduct(p, avgCosts.get(p.id)));
+  const enriched = products.map((p) => enrichProduct(p));
 
   return NextResponse.json({ products: enriched });
 }
@@ -95,7 +64,7 @@ const createSchema = z.object({
   imageUrl: z.string().optional(),
   weightUnit: z.enum(["GENERIC", "GRAM", "KG", "LITER", "ML", "BAG", "PIECE"]),
   basePackageSize: z.number().int().positive(),
-  sellPrice: z.number().min(0),
+  sellPrice: z.number().min(0).optional(),
   allowedSellUnits: z.array(z.number().int().positive()).optional(),
 });
 
@@ -122,7 +91,7 @@ export async function POST(request: Request) {
         imageUrl: data.imageUrl,
         weightUnit: data.weightUnit,
         basePackageSize: data.basePackageSize,
-        sellPrice: data.sellPrice,
+        sellPrice: data.sellPrice ?? 0,
         allowedSellUnits: data.allowedSellUnits ?? [100, 250, 500, 1000],
       },
     });

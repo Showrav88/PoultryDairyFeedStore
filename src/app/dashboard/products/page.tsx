@@ -294,8 +294,10 @@ export default function ProductsPage() {
                     <h3 className="font-semibold">{p.name}</h3>
                     <p className="text-xs text-gray-500">{p.productId}</p>
                     <p className="text-xs text-emerald-700">{typeLabel} · {sizeLabel}</p>
+                    {p.sellPrice > 0 && (
+                      <p className="text-xs text-gray-400">Suggested: {formatCurrency(p.sellPrice)}</p>
+                    )}
                   </div>
-                  <span className="text-sm font-medium text-emerald-600">{formatCurrency(p.sellPrice)}</span>
                 </div>
                 <div className="mt-3 space-y-1 text-sm text-gray-500">
                   <p>{t.products.stock}: <strong className="text-gray-900 dark:text-white">{p.inventory.formattedTotal}</strong></p>
