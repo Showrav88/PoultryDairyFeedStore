@@ -35,10 +35,11 @@ export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1`;
     const deployStatus = readDeployStatus();
+    const deploySha = readDeploySha() ?? deployStatus?.sha ?? null;
     return NextResponse.json({
       status: "ok",
       database: "connected",
-      deploySha: readDeploySha(),
+      deploySha,
       deployState: deployStatus?.state ?? null,
       deployMessage: deployStatus?.message ?? null,
       timestamp: new Date().toISOString(),
