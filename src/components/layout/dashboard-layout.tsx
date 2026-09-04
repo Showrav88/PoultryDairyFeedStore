@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Package,
   Users,
+  UserRound,
   ShoppingCart,
   Store,
   Wallet,
@@ -24,7 +25,8 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, key: "dashboard" as const },
   { href: "/dashboard/products", icon: Package, key: "products" as const },
-  { href: "/dashboard/buyers", icon: Users, key: "buyers" as const },
+  { href: "/dashboard/suppliers", icon: Users, key: "suppliers" as const },
+  { href: "/dashboard/farmers", icon: UserRound, key: "farmers" as const },
   { href: "/dashboard/purchases", icon: ShoppingCart, key: "purchases" as const },
   { href: "/dashboard/sell", icon: Store, key: "sellCounter" as const },
   { href: "/dashboard/wallet", icon: Wallet, key: "wallet" as const },
