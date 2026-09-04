@@ -1,18 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ShoppingCart, Search, X, Plus, Minus } from "lucide-react";
+import { ShoppingCart, Search, X, Plus, Minus, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import {
+  formatFullPackageLabel,
   formatSellUnitLabel,
   getCustomUnitOptions,
+  getKhucraSellUnits,
   parseCustomSellAmount,
+  supportsFullPackageSale,
   type CustomSellUnit,
 } from "@/lib/inventory/sell-units";
+
+type SellMode = "khucra" | "full_bag" | "custom";
 
 interface Product {
   id: string;
@@ -67,7 +72,7 @@ export default function SellCounterPage() {
   const [searchDate, setSearchDate] = useState("");
   const [searchResults, setSearchResults] = useState<Sale[]>([]);
   const [showSearch, setShowSearch] = useState(false);
-  const [useCustomAmount, setUseCustomAmount] = useState(false);
+  const [sellMode, setSellMode] = useState<SellMode>("khucra");
   const [customAmount, setCustomAmount] = useState(1);
   const [customUnit, setCustomUnit] = useState<CustomSellUnit>("KG");
 
@@ -91,7 +96,7 @@ export default function SellCounterPage() {
     setSellUnit(p.allowedSellUnits[0] ?? 250);
     setSellPrice(p.sellPrice);
     setUnitCount(1);
-    setUseCustomAmount(false);
+    setSellMode("khucra");
     setCustomAmount(1);
     const units = getCustomUnitOptions(p.weightUnit);
     setCustomUnit(units[0]?.value ?? "KG");
@@ -99,11 +104,32 @@ export default function SellCounterPage() {
 
   const effectiveSellUnit = () => {
     if (!selectedProduct) return sellUnit;
-    if (useCustomAmount) {
+    if (sellMode === "full_bag") {
+      return selectedProduct.basePackageSize;
+    }
+    if (sellMode === "custom") {
       return parseCustomSellAmount(customAmount, customUnit);
     }
     return sellUnit;
   };
+
+  const setSellModeAndSync = (mode: SellMode) => {
+    setSellMode(mode);
+    if (mode === "full_bag" && selectedProduct) {
+      setSellUnit(selectedProduct.basePackageSize);
+    } else if (mode === "khucra" && selectedProduct) {
+      const units = getKhucraSellUnits(selectedProduct.allowedSellUnits, selectedProduct.basePackageSize);
+      setSellUnit(units[0] ?? selectedProduct.allowedSellUnits[0] ?? 250);
+    }
+  };
+
+  const khucraUnits = selectedProduct
+    ? getKhucraSellUnits(selectedProduct.allowedSellUnits, selectedProduct.basePackageSize)
+    : [];
+  const showFullBag =
+    selectedProduct &&
+    supportsFullPackageSale(selectedProduct.weightUnit) &&
+    selectedProduct.basePackageSize > 1;
 
   const addToCart = () => {
     if (!selectedProduct) return;
@@ -278,41 +304,98 @@ export default function SellCounterPage() {
               </p>
             )}
 
-            <div className="mb-2 flex gap-2">
+            <div className="mb-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setUseCustomAmount(false)}
-                className={`rounded-lg px-3 py-1 text-xs border ${!useCustomAmount ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"}`}
+                onClick={() => setSellModeAndSync("khucra")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${
+                  sellMode === "khucra"
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "border-gray-300 dark:border-gray-600"
+                }`}
               >
-                Quick buttons
+                {t.sell.khucra}
               </button>
+              {showFullBag && (
+                <button
+                  type="button"
+                  onClick={() => setSellModeAndSync("full_bag")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${
+                    sellMode === "full_bag"
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300"
+                  }`}
+                >
+                  <Package size={12} className="inline mr-1" />
+                  {t.sell.fullBag}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => setUseCustomAmount(true)}
-                className={`rounded-lg px-3 py-1 text-xs border ${useCustomAmount ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"}`}
+                onClick={() => setSellModeAndSync("custom")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${
+                  sellMode === "custom"
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "border-gray-300 dark:border-gray-600"
+                }`}
               >
-                Custom amount
+                {t.sell.customAmount}
               </button>
             </div>
 
-            {!useCustomAmount ? (
+            {sellMode === "khucra" && (
               <>
-                <Label className="mb-1 block">{t.sell.khucra} / {t.sell.fullBag}</Label>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {selectedProduct.allowedSellUnits.map((u) => (
-                    <button
-                      key={u}
-                      onClick={() => setSellUnit(u)}
-                      className={`min-h-11 rounded-lg border px-3 py-2 text-sm ${
-                        sellUnit === u ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"
-                      }`}
-                    >
-                      {formatSellUnitLabel(u, selectedProduct.weightUnit, selectedProduct.basePackageSize)}
-                    </button>
-                  ))}
-                </div>
+                <Label className="mb-1 block">{t.sell.khucra}</Label>
+                {khucraUnits.length > 0 ? (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {khucraUnits.map((u) => (
+                      <button
+                        key={u}
+                        onClick={() => setSellUnit(u)}
+                        className={`min-h-11 rounded-lg border px-3 py-2 text-sm ${
+                          sellUnit === u
+                            ? "bg-emerald-600 text-white border-emerald-600"
+                            : "border-gray-300 dark:border-gray-600"
+                        }`}
+                      >
+                        {formatSellUnitLabel(u, selectedProduct.weightUnit, selectedProduct.basePackageSize)}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mb-3 text-xs text-gray-500">
+                    No khucra presets for this product. Use Custom amount or Full Bag.
+                  </p>
+                )}
               </>
-            ) : (
+            )}
+
+            {sellMode === "full_bag" && showFullBag && (
+              <div className="mb-3 rounded-xl border-2 border-blue-400 bg-blue-50 p-4 dark:border-blue-600 dark:bg-blue-950/30">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
+                    <Package size={24} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-blue-900 dark:text-blue-100">
+                      {formatFullPackageLabel(selectedProduct.basePackageSize, selectedProduct.weightUnit)}
+                    </p>
+                    <p className="mt-1 text-xs text-blue-800 dark:text-blue-200">
+                      Sell 1 complete sealed bag per quantity. Stock:{" "}
+                      <strong>{selectedProduct.inventory.closedBags} sealed bags</strong>
+                      {selectedProduct.inventory.formattedOpenBag
+                        ? ` (+ open bag ${selectedProduct.inventory.formattedOpenBag})`
+                        : ""}
+                    </p>
+                    <p className="mt-2 text-xs text-blue-700/80 dark:text-blue-300/80">
+                      Each unit deducts {formatFullPackageLabel(selectedProduct.basePackageSize, selectedProduct.weightUnit)} from inventory.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {sellMode === "custom" && (
               <div className="mb-3 grid grid-cols-2 gap-3">
                 <div>
                   <Label>Custom quantity</Label>
@@ -345,7 +428,9 @@ export default function SellCounterPage() {
 
             <div className="mb-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <div>
-                <Label>{t.sell.quantity}</Label>
+                <Label>
+                  {sellMode === "full_bag" ? t.sell.bagQuantity : t.sell.quantity}
+                </Label>
                 <div className="flex items-center gap-2">
                   <Button size="icon" variant="outline" onClick={() => setUnitCount(Math.max(1, unitCount - 1))}>
                     <Minus size={14} />
@@ -357,7 +442,9 @@ export default function SellCounterPage() {
                 </div>
               </div>
               <div>
-                <Label>{t.sell.sellPrice}</Label>
+                <Label>
+                  {sellMode === "full_bag" ? t.sell.pricePerBag : t.sell.sellPrice}
+                </Label>
                 <Input
                   type="number"
                   value={sellPrice}
