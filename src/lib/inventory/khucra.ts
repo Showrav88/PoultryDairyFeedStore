@@ -168,6 +168,53 @@ export function addStock(
   };
 }
 
+/** Restore stock when admin approves a farm return (reverse of deduct). */
+export function restoreStock(
+  state: InventoryState,
+  amountInSmallestUnit: number
+): AddStockResult {
+  if (amountInSmallestUnit <= 0) {
+    return { added: 0, newState: state };
+  }
+
+  let { closedPackages, openPackageRemaining, stockInSmallestUnit, basePackageSize } = state;
+  stockInSmallestUnit += amountInSmallestUnit;
+  let remaining = amountInSmallestUnit;
+
+  if (openPackageRemaining > 0 && openPackageRemaining < basePackageSize) {
+    const space = basePackageSize - openPackageRemaining;
+    const fill = Math.min(remaining, space);
+    openPackageRemaining += fill;
+    remaining -= fill;
+  }
+
+  const fullBags = Math.floor(remaining / basePackageSize);
+  closedPackages += fullBags;
+  remaining -= fullBags * basePackageSize;
+
+  if (remaining > 0) {
+    if (openPackageRemaining === 0) {
+      openPackageRemaining = remaining;
+    } else {
+      openPackageRemaining += remaining;
+      if (openPackageRemaining > basePackageSize) {
+        closedPackages += Math.floor(openPackageRemaining / basePackageSize);
+        openPackageRemaining = openPackageRemaining % basePackageSize;
+      }
+    }
+  }
+
+  return {
+    added: amountInSmallestUnit,
+    newState: {
+      stockInSmallestUnit,
+      closedPackages,
+      openPackageRemaining,
+      basePackageSize,
+    },
+  };
+}
+
 /**
  * Get inventory summary for analytics display.
  */
