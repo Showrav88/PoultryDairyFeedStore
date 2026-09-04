@@ -206,6 +206,14 @@ push to `main`.
 
 ### 1. Create an SSH key for GitHub Actions on the VPS
 
+Run the helper script (prints all values to paste into GitHub):
+
+```bash
+sudo bash /var/www/NEWPROJECT/deploy/setup-github-actions-deploy.sh
+```
+
+Or manually:
+
 ```bash
 sudo -u newproject install -m 700 -d /home/newproject/.ssh
 sudo -u newproject ssh-keygen -t ed25519 -N '' \
