@@ -25,9 +25,6 @@ jobs:
 
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "::error::Missing GitHub Actions secrets: ${missing[*]}"
-            echo "On VPS: add DEPLOY_WEBHOOK_SECRET to .env and set GitHub secrets:"
-            echo "  DEPLOY_WEBHOOK_SECRET = same value as VPS .env"
-            echo "  VPS_DEPLOY_URL = http://31.97.50.25:8081/api/deploy"
             exit 1
           fi
 
@@ -37,10 +34,34 @@ jobs:
           VPS_DEPLOY_URL: ${{ secrets.VPS_DEPLOY_URL }}
         run: |
           set -euo pipefail
+          HEALTH_URL="${VPS_DEPLOY_URL%/api/deploy}/api/health"
+
           echo "Deploying commit ${GITHUB_SHA} via webhook"
-          response=$(curl -fsS --max-time 600 -X POST "$VPS_DEPLOY_URL" \
+          response=$(curl -sS --max-time 120 -w "\nHTTP_CODE:%{http_code}" -X POST "$VPS_DEPLOY_URL" \
             -H "Authorization: Bearer ${DEPLOY_WEBHOOK_SECRET}" \
             -H "Content-Type: application/json" \
             -d "{\"ref\":\"${GITHUB_REF}\",\"sha\":\"${GITHUB_SHA}\"}")
-          echo "$response"
-          echo "Deploy finished successfully."
+
+          body="${response%HTTP_CODE:*}"
+          code="${response##*HTTP_CODE:}"
+          echo "HTTP $code"
+          echo "$body"
+
+          if [[ "$code" != "202" && "$code" != "200" ]]; then
+            echo "::error::Deploy webhook failed with HTTP $code"
+            exit 1
+          fi
+
+          echo "Waiting for app health at $HEALTH_URL ..."
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null; then
+              echo "Health check passed (attempt $attempt)"
+              echo "Deploy finished successfully."
+              exit 0
+            fi
+            echo "Not healthy yet ($attempt/60)..."
+            sleep 10
+          done
+
+          echo "::error::App did not become healthy within 10 minutes"
+          exit 1

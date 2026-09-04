@@ -28,13 +28,14 @@ response=$(curl -sS -w "\nHTTP_CODE:%{http_code}" -X POST "$URL" \
 body="${response%HTTP_CODE:*}"
 code="${response##*HTTP_CODE:}"
 
-echo "HTTP $code"
-echo "$body"
-
 if [[ "$code" == "401" ]]; then
   echo ""
   echo "401 = secret mismatch OR old app code without /api/deploy."
   echo "1) git pull origin main && sudo /usr/local/sbin/deploy-newproject"
   echo "2) Copy this secret to GitHub DEPLOY_WEBHOOK_SECRET (no quotes):"
   echo "$SECRET"
+elif [[ "$code" == "202" ]]; then
+  echo ""
+  echo "202 = deploy started in background. Watch:"
+  echo "  sudo tail -f /var/log/newproject-deploy.log"
 fi
