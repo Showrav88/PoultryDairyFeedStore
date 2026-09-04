@@ -47,12 +47,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const sha = typeof body.sha === "string" ? body.sha : "unknown";
 
-  // Run deploy in background so service restart does not kill this request.
-  const child = spawn(
-    "sudo",
-    ["bash", "-lc", `${DEPLOY_CMD} >> ${DEPLOY_LOG} 2>&1`],
-    { detached: true, stdio: "ignore" }
-  );
+  // Must match sudoers exactly: NOPASSWD: /usr/local/sbin/deploy-newproject
+  const child = spawn("sudo", [DEPLOY_CMD], { detached: true, stdio: "ignore" });
   child.unref();
 
   return NextResponse.json(
