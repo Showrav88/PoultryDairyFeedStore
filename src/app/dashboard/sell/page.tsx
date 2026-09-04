@@ -132,6 +132,15 @@ function SellCounterContent() {
   }, [loadProducts]);
 
   const cartTotal = cart.reduce((s, i) => s + i.pricePerUnit * i.unitCount, 0);
+  const generalOverpaid = !farmerId && cartTotal > 0 && paidAmount > cartTotal;
+
+  const handlePaidChange = (value: number) => {
+    if (!farmerId && cartTotal > 0 && value > cartTotal) {
+      setPaidAmount(cartTotal);
+      return;
+    }
+    setPaidAmount(value);
+  };
 
   const selectProduct = (p: Product) => {
     setSelectedProduct(p);
@@ -728,8 +737,11 @@ function SellCounterContent() {
               <NumberInput
                 placeholder={t.common.enterAmount}
                 value={paidAmount}
-                onChange={setPaidAmount}
+                onChange={handlePaidChange}
               />
+              {generalOverpaid && (
+                <p className="mt-1 text-sm text-red-500">{t.sell.paidExceedsTotal}</p>
+              )}
             </div>
           </div>
 
@@ -756,7 +768,11 @@ function SellCounterContent() {
             </p>
           )}
 
-          <Button className="min-h-12 w-full" onClick={completeSale} disabled={cart.length === 0 || loading}>
+          <Button
+            className="min-h-12 w-full"
+            onClick={completeSale}
+            disabled={cart.length === 0 || loading || generalOverpaid}
+          >
             {t.sell.completeSale}
           </Button>
         </div>

@@ -167,6 +167,7 @@ export const messages = {
       sellPriceNow: "Sell price (enter now)",
       noAvgCostYet: "No buy cost yet — add a Purchase first to see profit",
       notAutoFilled: "not auto-filled",
+      paidExceedsTotal: "Paid amount cannot exceed sale total for general customers",
     },
     wallet: {
       title: "Wallet",
@@ -372,6 +373,7 @@ export const messages = {
       sellPriceNow: "বিক্রয় মূল্য (এখন লিখুন)",
       noAvgCostYet: "ক্রয় মূল্য নেই — লাভ দেখতে প্রথমে ক্রয় যোগ করুন",
       notAutoFilled: "স্বয়ংক্রিয় নয়",
+      paidExceedsTotal: "সাধারণ গ্রাহকের জন্য পরিশোধিত টাকা বিক্রয় মোটের বেশি হতে পারবে না",
     },
     wallet: {
       title: "ওয়ালেট",

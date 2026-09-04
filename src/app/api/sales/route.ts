@@ -108,6 +108,10 @@ export async function POST(request: Request) {
       const totalCost = lineItems.reduce((s, i) => s + i.costTotal, 0);
       const totalProfit = lineItems.reduce((s, i) => s + i.profit, 0);
 
+      if (!data.farmerId && data.paidAmount > totalAmount) {
+        throw new Error("Paid amount cannot exceed sale total for general customers");
+      }
+
       const salePaid = Math.min(data.paidAmount, totalAmount);
       const dueAmount = Math.max(0, totalAmount - salePaid);
       const status = calcPaymentStatus(totalAmount, salePaid);
