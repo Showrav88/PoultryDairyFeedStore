@@ -1,0 +1,21 @@
+[Unit]
+Description=Poultry and Dairy Feed Store
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=newproject
+Group=newproject
+WorkingDirectory=/var/www/NEWPROJECT
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/NEWPROJECT/.env
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 5001
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+SyslogIdentifier=newproject-api
+
+[Install]
+WantedBy=multi-user.target
