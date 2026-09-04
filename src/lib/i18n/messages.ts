@@ -57,6 +57,7 @@ export const messages = {
       paid: "Paid",
       due: "Due",
       partial: "Partial",
+      optional: "optional",
     },
     products: {
       title: "Product Catalogue",
@@ -227,6 +228,7 @@ export const messages = {
       paid: "পরিশোধিত",
       due: "বাকি",
       partial: "আংশিক",
+      optional: "ঐচ্ছিক",
     },
     products: {
       title: "পণ্য তালিকা",

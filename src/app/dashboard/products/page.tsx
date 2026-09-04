@@ -162,6 +162,11 @@ export default function ProductsPage() {
 
   const presets = getSellPresets(tpl.weightUnit, packageToBaseSize(tpl.weightUnit, packageSize));
   const showPackageSize = productType === "feed_bag" || productType === "liquid";
+  const productFormValid =
+    name.trim().length > 0 &&
+    sellPrice > 0 &&
+    allowedSellUnits.length > 0 &&
+    (!showPackageSize || packageSize > 0);
 
   return (
     <div>
@@ -204,8 +209,8 @@ export default function ProductsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>{t.products.productName}</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Layer Feed 50kg" />
+              <Label>{t.products.productName} *</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Layer Feed 50kg" required />
             </div>
             <div>
               <Label>{t.products.image} (optional URL)</Label>
@@ -215,14 +220,15 @@ export default function ProductsPage() {
             {showPackageSize && (
               <div>
                 <Label>
-                  {productType === "feed_bag" ? t.products.bagSizeKg : t.products.bottleSizeMl}
+                  {productType === "feed_bag" ? t.products.bagSizeKg : t.products.bottleSizeMl} *
                 </Label>
                 <Input
                   type="number"
                   min={0.001}
                   step="any"
+                  required
                   value={packageSize}
-                  onChange={(e) => setPackageSize(parseFloat(e.target.value) || 1)}
+                  onChange={(e) => setPackageSize(parseFloat(e.target.value) || 0)}
                 />
                 {productType === "feed_bag" && (
                   <p className="mt-1 text-xs text-gray-500">
@@ -233,10 +239,13 @@ export default function ProductsPage() {
             )}
 
             <div>
-              <Label>{t.products.referencePrice}</Label>
+              <Label>{t.products.referencePrice} *</Label>
               <Input
                 type="number"
-                min={0}
+                min={0.01}
+                step="any"
+                required
+                placeholder="Enter suggested price"
                 value={formatOptionalAmount(sellPrice)}
                 onChange={(e) => setSellPrice(parseOptionalAmountInput(e.target.value))}
               />
@@ -244,7 +253,7 @@ export default function ProductsPage() {
             </div>
 
             <div className="md:col-span-2">
-              <Label>{t.products.quickSellButtons}</Label>
+              <Label>{t.products.quickSellButtons} *</Label>
               <p className="mb-2 text-xs text-gray-500">{t.products.quickSellHelp}</p>
               <div className="flex flex-wrap gap-2">
                 {presets.map((p) => (
@@ -266,7 +275,7 @@ export default function ProductsPage() {
           </div>
 
           <div className="mt-4 flex gap-2">
-            <Button onClick={handleSave} disabled={!name || loading}>{t.common.save}</Button>
+            <Button onClick={handleSave} disabled={!productFormValid || loading}>{t.common.save}</Button>
             <Button variant="outline" onClick={resetForm}>{t.common.cancel}</Button>
           </div>
         </div>

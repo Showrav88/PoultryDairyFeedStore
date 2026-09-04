@@ -667,12 +667,12 @@ export default function SellCounterPage() {
 
           <div className="space-y-2 mb-3">
             <div>
-              <Label>{t.sell.customerName}</Label>
-              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+              <Label>{t.sell.customerName} ({t.common.optional})</Label>
+              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={t.common.optional} />
             </div>
             <div>
-              <Label>{t.sell.customerPhone}</Label>
-              <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+              <Label>{t.sell.customerPhone} ({t.common.optional})</Label>
+              <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder={t.common.optional} />
             </div>
             <div>
               <Label>{t.common.paid}</Label>
