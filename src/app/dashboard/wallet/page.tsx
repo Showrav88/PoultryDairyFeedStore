@@ -146,14 +146,19 @@ export default function WalletPage() {
                 <td className="px-4 py-3 text-xs">{formatDateTime(tx.createdAt, locale)}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    tx.type === "DEPOSIT" || tx.type === "SALE_INCOME" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                    tx.type === "DEPOSIT" || tx.type === "SALE_INCOME" ? "bg-emerald-100 text-emerald-700" :
+                    tx.type === "RECEIVABLE" ? "bg-blue-100 text-blue-700" :
+                    tx.type === "PAYABLE" ? "bg-orange-100 text-orange-700" :
+                    "bg-red-100 text-red-700"
                   }`}>{tx.type}</span>
                 </td>
                 <td className="px-4 py-3">{tx.category ? categoryLabel(tx.category) : "—"}</td>
                 <td className={`px-4 py-3 text-right font-medium ${
-                  tx.type === "DEPOSIT" || tx.type === "SALE_INCOME" ? "text-emerald-600" : "text-red-600"
+                  tx.type === "DEPOSIT" || tx.type === "SALE_INCOME" || tx.type === "RECEIVABLE" ? "text-emerald-600" : "text-red-600"
                 }`}>
-                  {tx.type === "DEPOSIT" || tx.type === "SALE_INCOME" ? "+" : "-"}{formatCurrency(tx.amount)}
+                  {tx.type === "RECEIVABLE" || tx.type === "PAYABLE" ? "" : tx.type === "DEPOSIT" || tx.type === "SALE_INCOME" ? "+" : "-"}
+                  {formatCurrency(tx.amount)}
+                  {tx.type === "RECEIVABLE" ? " (due in)" : tx.type === "PAYABLE" ? " (due out)" : ""}
                 </td>
                 <td className="px-4 py-3 text-gray-500">{tx.note || "—"}</td>
               </tr>

@@ -99,6 +99,18 @@ export async function POST(request: Request) {
         }
       }
 
+      if (dueAmount > 0) {
+        await tx.walletTransaction.create({
+          data: {
+            shopId: session.shopId,
+            type: "PAYABLE",
+            amount: dueAmount,
+            note: `Supplier due - Purchase #${purchase.id.slice(-6)} (${purchase.buyer.name})`,
+            referenceId: purchase.id,
+          },
+        });
+      }
+
       return purchase;
     });
 

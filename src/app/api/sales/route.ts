@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import { deductStock, sellUnitLabel } from "@/lib/inventory/khucra";
+import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
+import { deductStock } from "@/lib/inventory/khucra";
 
 const saleSchema = z.object({
   customerName: z.string().optional(),
@@ -74,7 +75,11 @@ export async function POST(request: Request) {
         return {
           productId: item.productId,
           quantityInSmallestUnit: totalQty,
-          sellUnitLabel: sellUnitLabel(item.quantityInSmallestUnit, product.basePackageSize),
+          sellUnitLabel: formatSellUnitLabel(
+            item.quantityInSmallestUnit,
+            product.weightUnit,
+            product.basePackageSize
+          ),
           pricePerUnit: item.pricePerUnit,
           lineTotal,
           unitCount: item.unitCount,
@@ -124,6 +129,18 @@ export async function POST(request: Request) {
             },
           });
         }
+      }
+
+      if (dueAmount > 0) {
+        await tx.walletTransaction.create({
+          data: {
+            shopId: session.shopId,
+            type: "RECEIVABLE",
+            amount: dueAmount,
+            note: `Customer due - Sale #${sale.id.slice(-6)}${data.customerName ? ` (${data.customerName})` : ""}`,
+            referenceId: sale.id,
+          },
+        });
       }
 
       return sale;

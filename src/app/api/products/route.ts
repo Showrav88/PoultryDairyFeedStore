@@ -5,6 +5,36 @@ import { prisma } from "@/lib/db";
 import { generateProductId } from "@/lib/utils";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
+import { formatStockDisplay } from "@/lib/inventory/sell-units";
+
+function enrichProduct(p: {
+  stockInSmallestUnit: number;
+  closedPackages: number;
+  openPackageRemaining: number;
+  basePackageSize: number;
+  sellPrice: unknown;
+  weightUnit: string;
+  [key: string]: unknown;
+}) {
+  const inventory = getInventorySummary({
+    stockInSmallestUnit: p.stockInSmallestUnit,
+    closedPackages: p.closedPackages,
+    openPackageRemaining: p.openPackageRemaining,
+    basePackageSize: p.basePackageSize,
+  });
+  return {
+    ...p,
+    sellPrice: Number(p.sellPrice),
+    inventory: {
+      ...inventory,
+      formattedTotal: formatStockDisplay(
+        p.stockInSmallestUnit,
+        p.weightUnit,
+        p.basePackageSize
+      ),
+    },
+  };
+}
 
 export async function GET() {
   const session = await getSession();
@@ -15,16 +45,7 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const enriched = products.map((p) => ({
-    ...p,
-    sellPrice: Number(p.sellPrice),
-    inventory: getInventorySummary({
-      stockInSmallestUnit: p.stockInSmallestUnit,
-      closedPackages: p.closedPackages,
-      openPackageRemaining: p.openPackageRemaining,
-      basePackageSize: p.basePackageSize,
-    }),
-  }));
+  const enriched = products.map((p) => enrichProduct(p));
 
   return NextResponse.json({ products: enriched });
 }

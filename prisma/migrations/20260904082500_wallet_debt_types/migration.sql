@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "WalletTxType" ADD VALUE 'RECEIVABLE';
+ALTER TYPE "WalletTxType" ADD VALUE 'PAYABLE';

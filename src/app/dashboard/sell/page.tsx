@@ -7,13 +7,14 @@ import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { sellUnitLabel } from "@/lib/inventory/khucra";
+import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
 
 interface Product {
   id: string;
   productId: string;
   name: string;
   imageUrl?: string;
+  weightUnit: string;
   basePackageSize: number;
   sellPrice: number;
   allowedSellUnits: number[];
@@ -90,7 +91,7 @@ export default function SellCounterPage() {
       productId: selectedProduct.id,
       productName: selectedProduct.name,
       quantityInSmallestUnit: sellUnit,
-      sellUnitLabel: sellUnitLabel(sellUnit, selectedProduct.basePackageSize),
+      sellUnitLabel: formatSellUnitLabel(sellUnit, selectedProduct.weightUnit, selectedProduct.basePackageSize),
       pricePerUnit: sellPrice,
       unitCount,
     };
@@ -244,7 +245,7 @@ export default function SellCounterPage() {
               Stock: {selectedProduct.inventory.formattedTotal} · {selectedProduct.inventory.closedBags} bags
             </p>
 
-            <Label className="mb-1 block">{t.sell.khucra}</Label>
+            <Label className="mb-1 block">{t.sell.khucra} / {t.sell.fullBag}</Label>
             <div className="mb-3 flex flex-wrap gap-2">
               {selectedProduct.allowedSellUnits.map((u) => (
                 <button
@@ -254,7 +255,7 @@ export default function SellCounterPage() {
                     sellUnit === u ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"
                   }`}
                 >
-                  {sellUnitLabel(u, selectedProduct.basePackageSize)}
+                  {formatSellUnitLabel(u, selectedProduct.weightUnit, selectedProduct.basePackageSize)}
                 </button>
               ))}
             </div>

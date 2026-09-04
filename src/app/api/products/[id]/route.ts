@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
+import { formatStockDisplay } from "@/lib/inventory/sell-units";
 
 export async function GET(
   _req: Request,
@@ -23,12 +24,19 @@ export async function GET(
     product: {
       ...product,
       sellPrice: Number(product.sellPrice),
-      inventory: getInventorySummary({
-        stockInSmallestUnit: product.stockInSmallestUnit,
-        closedPackages: product.closedPackages,
-        openPackageRemaining: product.openPackageRemaining,
-        basePackageSize: product.basePackageSize,
-      }),
+      inventory: {
+        ...getInventorySummary({
+          stockInSmallestUnit: product.stockInSmallestUnit,
+          closedPackages: product.closedPackages,
+          openPackageRemaining: product.openPackageRemaining,
+          basePackageSize: product.basePackageSize,
+        }),
+        formattedTotal: formatStockDisplay(
+          product.stockInSmallestUnit,
+          product.weightUnit,
+          product.basePackageSize
+        ),
+      },
     },
   });
 }

@@ -5,8 +5,7 @@ import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 
 const updateSchema = z.object({
-  paidAmount: z.number().min(0).optional(),
-  notes: z.string().optional(),
+  paidAmount: z.number().min(0),
 });
 
 function calcPaymentStatus(total: number, paid: number) {
@@ -28,56 +27,44 @@ export async function PATCH(
     const body = await request.json();
     const data = updateSchema.parse(body);
 
-    const existing = await prisma.purchase.findFirst({
-      where: { id, shopId: session.shopId },
-      include: { buyer: true },
-    });
+    const existing = await prisma.sale.findFirst({ where: { id, shopId: session.shopId } });
+    if (!existing) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
 
-    if (!existing) {
-      return NextResponse.json({ error: "Purchase not found" }, { status: 404 });
-    }
-
-    const totalCost = Number(existing.totalCost);
-    const newPaid = data.paidAmount ?? Number(existing.paidAmount);
-
-    if (newPaid > totalCost) {
-      return NextResponse.json({ error: "Paid amount cannot exceed total cost" }, { status: 400 });
+    const totalAmount = Number(existing.totalAmount);
+    if (data.paidAmount > totalAmount) {
+      return NextResponse.json({ error: "Paid amount cannot exceed total" }, { status: 400 });
     }
 
     const oldPaid = Number(existing.paidAmount);
-    const paymentDelta = newPaid - oldPaid;
-    const newDue = Math.max(0, totalCost - newPaid);
+    const paymentDelta = data.paidAmount - oldPaid;
+    const newDue = Math.max(0, totalAmount - data.paidAmount);
     const oldDue = Number(existing.dueAmount);
 
     const result = await prisma.$transaction(async (tx) => {
-      const purchase = await tx.purchase.update({
+      const sale = await tx.sale.update({
         where: { id },
         data: {
-          paidAmount: newPaid,
+          paidAmount: data.paidAmount,
           dueAmount: newDue,
-          status: calcPaymentStatus(totalCost, newPaid),
-          ...(data.notes !== undefined ? { notes: data.notes } : {}),
+          status: calcPaymentStatus(totalAmount, data.paidAmount),
         },
-        include: { items: { include: { product: true } }, buyer: true },
+        include: { items: { include: { product: true } } },
       });
 
       if (paymentDelta !== 0) {
         const wallet = await tx.wallet.findUnique({ where: { shopId: session.shopId } });
         if (wallet) {
-          if (paymentDelta > 0 && Number(wallet.balance) < paymentDelta) {
-            throw new Error("Insufficient wallet balance for additional payment");
-          }
           await tx.wallet.update({
             where: { shopId: session.shopId },
-            data: { balance: { decrement: paymentDelta } },
+            data: { balance: { increment: paymentDelta } },
           });
           await tx.walletTransaction.create({
             data: {
               shopId: session.shopId,
-              type: paymentDelta > 0 ? "PURCHASE_EXPENSE" : "ADJUSTMENT",
+              type: paymentDelta > 0 ? "SALE_INCOME" : "ADJUSTMENT",
               amount: Math.abs(paymentDelta),
-              note: `Purchase payment update #${purchase.id.slice(-6)}`,
-              referenceId: purchase.id,
+              note: `Sale payment update #${sale.id.slice(-6)}`,
+              referenceId: sale.id,
             },
           });
         }
@@ -88,22 +75,22 @@ export async function PATCH(
         await tx.walletTransaction.create({
           data: {
             shopId: session.shopId,
-            type: "PAYABLE",
+            type: "RECEIVABLE",
             amount: Math.abs(dueDelta),
             note:
               dueDelta > 0
-                ? `Supplier due increased #${purchase.id.slice(-6)}`
-                : `Supplier due reduced #${purchase.id.slice(-6)}`,
-            referenceId: purchase.id,
+                ? `Customer due increased #${sale.id.slice(-6)}`
+                : `Customer due collected #${sale.id.slice(-6)}`,
+            referenceId: sale.id,
           },
         });
       }
 
-      return purchase;
+      return sale;
     });
 
-    await logAudit(session.shopId, "PURCHASE", id, "UPDATE", `Purchase updated`, existing, result);
-    return NextResponse.json({ purchase: result });
+    await logAudit(session.shopId, "SALE", id, "UPDATE", `Sale payment updated`, existing, result);
+    return NextResponse.json({ sale: result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Update failed";
     if (err instanceof z.ZodError) {
