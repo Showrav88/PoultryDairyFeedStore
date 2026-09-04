@@ -7,15 +7,49 @@ import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
 import { formatStockDisplay } from "@/lib/inventory/sell-units";
 
-function enrichProduct(p: {
-  stockInSmallestUnit: number;
-  closedPackages: number;
-  openPackageRemaining: number;
-  basePackageSize: number;
-  sellPrice: unknown;
-  weightUnit: string;
-  [key: string]: unknown;
-}) {
+async function getAvgCostPerSmallestUnit(productIds: string[]) {
+  if (productIds.length === 0) return new Map<string, number>();
+
+  const items = await prisma.purchaseItem.findMany({
+    where: { productId: { in: productIds } },
+    select: {
+      productId: true,
+      quantity: true,
+      costPriceTotal: true,
+      product: { select: { basePackageSize: true } },
+    },
+  });
+
+  const totals = new Map<string, { cost: number; units: number }>();
+  for (const item of items) {
+    const units = item.quantity * item.product.basePackageSize;
+    if (units <= 0) continue;
+    const cur = totals.get(item.productId) ?? { cost: 0, units: 0 };
+    cur.cost += Number(item.costPriceTotal);
+    cur.units += units;
+    totals.set(item.productId, cur);
+  }
+
+  const result = new Map<string, number>();
+  for (const [id, { cost, units }] of totals) {
+    if (units > 0) result.set(id, cost / units);
+  }
+  return result;
+}
+
+function enrichProduct(
+  p: {
+    id: string;
+    stockInSmallestUnit: number;
+    closedPackages: number;
+    openPackageRemaining: number;
+    basePackageSize: number;
+    sellPrice: unknown;
+    weightUnit: string;
+    [key: string]: unknown;
+  },
+  avgCostPerUnit: number | undefined
+) {
   const inventory = getInventorySummary({
     stockInSmallestUnit: p.stockInSmallestUnit,
     closedPackages: p.closedPackages,
@@ -32,6 +66,11 @@ function enrichProduct(p: {
         p.weightUnit,
         p.basePackageSize
       ),
+      avgCostPerSmallestUnit: avgCostPerUnit ?? null,
+      formattedAvgCostPerKg:
+        avgCostPerUnit && (p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG")
+          ? `৳${((avgCostPerUnit * 1000).toFixed(2))}/kg`
+          : null,
     },
   };
 }
@@ -45,7 +84,8 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const enriched = products.map((p) => enrichProduct(p));
+  const avgCosts = await getAvgCostPerSmallestUnit(products.map((p) => p.id));
+  const enriched = products.map((p) => enrichProduct(p, avgCosts.get(p.id)));
 
   return NextResponse.json({ products: enriched });
 }

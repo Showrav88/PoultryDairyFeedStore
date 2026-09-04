@@ -16,6 +16,13 @@ import {
   supportsFullPackageSale,
   type CustomSellUnit,
 } from "@/lib/inventory/sell-units";
+import {
+  formatStockAmount,
+  getAvailableStock,
+  getCartReservedStock,
+  getLineStockAmount,
+  validateStockForLine,
+} from "@/lib/inventory/cart-stock";
 
 type SellMode = "khucra" | "full_bag" | "custom";
 
@@ -33,6 +40,10 @@ interface Product {
     closedBags: number;
     formattedOpenBag: string | null;
     totalStock: number;
+    openBagRemaining: number;
+    openBagPercent: number;
+    formattedAvgCostPerKg: string | null;
+    avgCostPerSmallestUnit: number | null;
   };
 }
 
@@ -75,6 +86,10 @@ export default function SellCounterPage() {
   const [sellMode, setSellMode] = useState<SellMode>("khucra");
   const [customAmount, setCustomAmount] = useState(1);
   const [customUnit, setCustomUnit] = useState<CustomSellUnit>("KG");
+  const [stockError, setStockError] = useState("");
+
+  const getAvailable = (productId: string, totalStock: number) =>
+    getAvailableStock(totalStock, cart, productId);
 
   const loadProducts = useCallback(() => {
     fetch("/api/products")
@@ -100,6 +115,7 @@ export default function SellCounterPage() {
     setCustomAmount(1);
     const units = getCustomUnitOptions(p.weightUnit);
     setCustomUnit(units[0]?.value ?? "KG");
+    setStockError("");
   };
 
   const effectiveSellUnit = () => {
@@ -131,13 +147,43 @@ export default function SellCounterPage() {
     supportsFullPackageSale(selectedProduct.weightUnit) &&
     selectedProduct.basePackageSize > 1;
 
+  const selectedAvailable = selectedProduct
+    ? getAvailable(selectedProduct.id, selectedProduct.inventory.totalStock)
+    : 0;
+
+  const lineStockNeeded = selectedProduct
+    ? getLineStockAmount(effectiveSellUnit(), unitCount)
+    : 0;
+
+  const maxUnitCount = selectedProduct && effectiveSellUnit() > 0
+    ? Math.max(1, Math.floor(selectedAvailable / effectiveSellUnit()))
+    : 1;
+
+  const sellMarginPerKg = selectedProduct?.inventory.avgCostPerSmallestUnit && effectiveSellUnit() > 0
+    ? (sellPrice / effectiveSellUnit() - selectedProduct.inventory.avgCostPerSmallestUnit) * 1000
+    : null;
+
   const addToCart = () => {
     if (!selectedProduct) return;
     const qty = effectiveSellUnit();
     if (qty <= 0) {
-      alert("Enter a valid sell quantity");
+      setStockError("Enter a valid sell quantity");
       return;
     }
+
+    const check = validateStockForLine(
+      selectedProduct.inventory.totalStock,
+      cart,
+      selectedProduct.id,
+      qty,
+      unitCount
+    );
+
+    if (!check.ok) {
+      setStockError(check.message);
+      return;
+    }
+
     const item: CartItem = {
       productId: selectedProduct.id,
       productName: selectedProduct.name,
@@ -148,11 +194,27 @@ export default function SellCounterPage() {
     };
     setCart([...cart, item]);
     setSelectedProduct(null);
+    setStockError("");
     setPaidAmount(cartTotal + sellPrice * unitCount);
   };
 
+  useEffect(() => {
+    if (unitCount > maxUnitCount) {
+      setUnitCount(Math.max(1, maxUnitCount));
+    }
+  }, [maxUnitCount, unitCount]);
+
   const completeSale = () => {
     if (cart.length === 0) return;
+
+    for (const product of products) {
+      const needed = getCartReservedStock(cart, product.id);
+      if (needed > product.inventory.totalStock) {
+        alert(`${product.name}: ${t.sell.notEnoughStock}`);
+        return;
+      }
+    }
+
     confirm(async () => {
       setLoading(true);
       try {
@@ -271,8 +333,16 @@ export default function SellCounterPage() {
               <h3 className="font-semibold text-sm truncate">{p.name}</h3>
               <p className="truncate text-xs text-gray-500">{p.productId}</p>
               <p className="text-xs mt-1 text-emerald-600 font-medium">
-                Stock: {p.inventory.formattedTotal} · {p.inventory.closedBags} bags
+                {t.sell.availableStock}: {formatStockAmount(getAvailable(p.id, p.inventory.totalStock), p.weightUnit)}
+                {(p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG") && (
+                  <> · {p.inventory.closedBags} sealed</>
+                )}
               </p>
+              {getCartReservedStock(cart, p.id) > 0 && (
+                <p className="text-xs text-blue-600">
+                  {t.sell.inCart}: {formatStockAmount(getCartReservedStock(cart, p.id), p.weightUnit)}
+                </p>
+              )}
               {p.inventory.totalStock <= 0 && (
                 <p className="text-xs text-red-500">No stock — add purchase first</p>
               )}
@@ -292,15 +362,56 @@ export default function SellCounterPage() {
               <h3 className="font-bold">{selectedProduct.name}</h3>
               <button onClick={() => setSelectedProduct(null)}><X size={18} /></button>
             </div>
-            <p className="text-xs text-gray-500 mb-3">
-              Stock: {selectedProduct.inventory.formattedTotal}
+            <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-xs text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+              <p className="font-semibold">{t.sell.availableStock}: {formatStockAmount(selectedAvailable, selectedProduct.weightUnit)}</p>
+              <p className="mt-1 text-emerald-800 dark:text-emerald-200">
+                Total in store: {selectedProduct.inventory.formattedTotal}
+                {getCartReservedStock(cart, selectedProduct.id) > 0 && (
+                  <> · {t.sell.inCart}: {formatStockAmount(getCartReservedStock(cart, selectedProduct.id), selectedProduct.weightUnit)}</>
+                )}
+              </p>
               {(selectedProduct.weightUnit === "BAG" || selectedProduct.weightUnit === "GRAM" || selectedProduct.weightUnit === "KG") && (
-                <> · {selectedProduct.inventory.closedBags} sealed bags</>
+                <div className="mt-2 space-y-1 border-t border-emerald-200 pt-2 dark:border-emerald-800">
+                  <p><strong>{t.sell.sealedBags}:</strong> {selectedProduct.inventory.closedBags}</p>
+                  {selectedProduct.inventory.openBagRemaining > 0 ? (
+                    <>
+                      <p><strong>{t.sell.openBagTitle}:</strong> {selectedProduct.inventory.formattedOpenBag} ({selectedProduct.inventory.openBagPercent}% left)</p>
+                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-emerald-200">
+                        <div
+                          className="h-full rounded-full bg-orange-500"
+                          style={{ width: `${selectedProduct.inventory.openBagPercent}%` }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-orange-700 dark:text-orange-300">{t.sell.openBagEmpty}</p>
+                  )}
+                  <p className="text-emerald-700 dark:text-emerald-300">{t.sell.openBagFinished}</p>
+                  {selectedProduct.inventory.formattedAvgCostPerKg && (
+                    <p><strong>{t.sell.avgBuyCost}:</strong> {selectedProduct.inventory.formattedAvgCostPerKg}</p>
+                  )}
+                  {sellMarginPerKg !== null && sellPrice > 0 && (
+                    <p>
+                      <strong>{t.sell.sellMargin}:</strong>{" "}
+                      <span className={sellMarginPerKg >= 0 ? "text-emerald-700" : "text-red-600"}>
+                        ৳{sellMarginPerKg.toFixed(2)}/kg
+                        {sellMarginPerKg >= 0 ? " profit" : " loss"} vs avg buy cost
+                      </span>
+                    </p>
+                  )}
+                </div>
               )}
-            </p>
-            {selectedProduct.inventory.formattedOpenBag && (
-              <p className="mb-3 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-700 dark:bg-orange-950/30">
-                Open bag has: <strong>{selectedProduct.inventory.formattedOpenBag}</strong> — khucra sells from this first, then opens a new bag automatically.
+            </div>
+
+            {stockError && (
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:bg-red-950/30">
+                {stockError}
+              </p>
+            )}
+
+            {lineStockNeeded > 0 && selectedAvailable >= lineStockNeeded && (
+              <p className="mb-3 text-xs text-gray-600">
+                {t.sell.stockAfterAdd}: {formatStockAmount(selectedAvailable - lineStockNeeded, selectedProduct.weightUnit)}
               </p>
             )}
 
@@ -432,14 +543,30 @@ export default function SellCounterPage() {
                   {sellMode === "full_bag" ? t.sell.bagQuantity : t.sell.quantity}
                 </Label>
                 <div className="flex items-center gap-2">
-                  <Button size="icon" variant="outline" onClick={() => setUnitCount(Math.max(1, unitCount - 1))}>
+                  <Button size="icon" variant="outline" onClick={() => {
+                    setUnitCount(Math.max(1, unitCount - 1));
+                    setStockError("");
+                  }}>
                     <Minus size={14} />
                   </Button>
                   <span className="font-bold w-8 text-center">{unitCount}</span>
-                  <Button size="icon" variant="outline" onClick={() => setUnitCount(unitCount + 1)}>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    disabled={unitCount >= maxUnitCount}
+                    onClick={() => {
+                      if (unitCount < maxUnitCount) {
+                        setUnitCount(unitCount + 1);
+                        setStockError("");
+                      } else {
+                        setStockError(t.sell.notEnoughStock);
+                      }
+                    }}
+                  >
                     <Plus size={14} />
                   </Button>
                 </div>
+                <p className="mt-1 text-xs text-gray-500">Max at this size: {maxUnitCount}</p>
               </div>
               <div>
                 <Label>
@@ -457,7 +584,11 @@ export default function SellCounterPage() {
               Line total: <strong>{formatCurrency(sellPrice * unitCount)}</strong>
             </p>
 
-            <Button className="min-h-12 w-full" onClick={addToCart}>
+            <Button
+              className="min-h-12 w-full"
+              onClick={addToCart}
+              disabled={selectedAvailable <= 0 || lineStockNeeded > selectedAvailable}
+            >
               <Plus size={16} /> Add to {t.sell.cart}
             </Button>
           </div>
