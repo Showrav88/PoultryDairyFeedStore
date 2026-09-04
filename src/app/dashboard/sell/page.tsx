@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ShoppingCart, Search, X, Plus, Minus, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -100,13 +101,17 @@ function SellCounterContent() {
   const [stockError, setStockError] = useState("");
   const [farmerId, setFarmerId] = useState<string | null>(farmerIdParam);
   const [farmerName, setFarmerName] = useState("");
+  const [farmerDue, setFarmerDue] = useState(0);
 
   useEffect(() => {
     if (farmerIdParam) {
       setFarmerId(farmerIdParam);
       fetch(`/api/farmers/${farmerIdParam}`)
         .then((r) => r.json())
-        .then((d) => setFarmerName(d.farmer?.name ?? ""));
+        .then((d) => {
+          setFarmerName(d.farmer?.name ?? "");
+          setFarmerDue(d.farmer?.totalDue ?? 0);
+        });
     }
   }, [farmerIdParam]);
 
@@ -278,6 +283,11 @@ function SellCounterContent() {
         setCustomerName("");
         setCustomerPhone("");
         setPaidAmount(0);
+        if (farmerId) {
+          fetch(`/api/farmers/${farmerId}`)
+            .then((r) => r.json())
+            .then((d) => setFarmerDue(d.farmer?.totalDue ?? 0));
+        }
         fetch("/api/products").then((r) => r.json()).then((d) => setProducts(d.products ?? []));
       } catch (err) {
         alert(err instanceof Error ? err.message : "Sale failed");
@@ -309,6 +319,14 @@ function SellCounterContent() {
           <p className="font-semibold text-emerald-800 dark:text-emerald-300">
             {t.farmers.sellToFarmer}: {farmerName}
           </p>
+          {farmerDue > 0 && (
+            <p className="mt-1 text-orange-700 dark:text-orange-300">
+              {t.farmers.farmerDueBalance}: {formatCurrency(farmerDue)}
+            </p>
+          )}
+          <Link href={`/dashboard/farmers/${farmerId}`} className="mt-2 inline-block text-emerald-700 underline dark:text-emerald-400">
+            {t.farmers.profile} / {t.farmers.collectPayment}
+          </Link>
         </div>
       )}
 
@@ -729,6 +747,12 @@ function SellCounterContent() {
           {cartTotal > paidAmount && (
             <p className="text-sm text-orange-500 mb-2">
               {t.common.due}: {formatCurrency(cartTotal - paidAmount)}
+            </p>
+          )}
+
+          {farmerId && paidAmount > cartTotal && cartTotal > 0 && (
+            <p className="text-sm text-emerald-600 mb-2">
+              {t.farmers.overpaymentHint}: {formatCurrency(paidAmount - cartTotal)}
             </p>
           )}
 

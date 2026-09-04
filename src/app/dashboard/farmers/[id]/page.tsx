@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Store } from "lucide-react";
+import { ArrowLeft, Store, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label, NumberInput } from "@/components/ui/input";
+import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
@@ -20,11 +20,20 @@ interface Sale {
   items: { product: { name: string }; sellUnitLabel: string; lineTotal: number }[];
 }
 
+interface PaymentRecord {
+  id: string;
+  amount: number;
+  note?: string;
+  createdAt: string;
+  allocations: { saleId: string | null; amount: number; label: string }[];
+}
+
 interface FarmerDetail {
   id: string;
   name: string;
   phone: string;
   address?: string;
+  openingDue: number;
   totalDue: number;
   alert: "none" | "normal" | "amber" | "red";
   daysOverdue: number;
@@ -37,8 +46,12 @@ export default function FarmerProfilePage() {
   const { state: confirmState, confirm, close } = useConfirmDialog();
   const [farmer, setFarmer] = useState<FarmerDetail | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [showCollect, setShowCollect] = useState(false);
+  const [collectAmount, setCollectAmount] = useState(0);
+  const [collectNote, setCollectNote] = useState("");
   const [paySaleId, setPaySaleId] = useState<string | null>(null);
-  const [paidAmount, setPaidAmount] = useState(0);
+  const [payAmount, setPayAmount] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(() => {
@@ -48,27 +61,32 @@ export default function FarmerProfilePage() {
         setFarmer(d.farmer);
         setSales(d.sales ?? []);
       });
+    fetch(`/api/farmers/${id}/payments`)
+      .then((r) => r.json())
+      .then((d) => setPayments(d.payments ?? []));
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
 
-  const openPayment = (sale: Sale) => {
+  const openSalePayment = (sale: Sale) => {
     setPaySaleId(sale.id);
-    setPaidAmount(sale.paidAmount);
+    setPayAmount(Number(sale.dueAmount));
   };
 
-  const savePayment = () => {
-    if (!paySaleId) return;
+  const saveManualPayment = () => {
+    if (collectAmount <= 0) return;
     confirm(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/sales/${paySaleId}`, {
-          method: "PATCH",
+        const res = await fetch(`/api/farmers/${id}/payments`, {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paidAmount }),
+          body: JSON.stringify({ amount: collectAmount, note: collectNote || undefined }),
         });
         if (!res.ok) throw new Error((await res.json()).error);
-        setPaySaleId(null);
+        setShowCollect(false);
+        setCollectAmount(0);
+        setCollectNote("");
         load();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Payment failed");
@@ -76,7 +94,30 @@ export default function FarmerProfilePage() {
         setLoading(false);
         close();
       }
-    }, { message: `${t.farmers.collectPayment}: ${formatCurrency(paidAmount)}?` });
+    }, { message: `${t.farmers.collectPayment}: ${formatCurrency(collectAmount)}?` });
+  };
+
+  const saveSalePayment = () => {
+    if (!paySaleId || payAmount <= 0) return;
+    confirm(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/sales/${paySaleId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ additionalAmount: payAmount }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        setPaySaleId(null);
+        setPayAmount(0);
+        load();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Payment failed");
+      } finally {
+        setLoading(false);
+        close();
+      }
+    }, { message: `${t.farmers.collectPayment}: ${formatCurrency(payAmount)}?` });
   };
 
   if (!farmer) {
@@ -105,6 +146,11 @@ export default function FarmerProfilePage() {
             <p className="mt-3 text-lg font-semibold text-orange-600">
               {t.farmers.totalDue}: {formatCurrency(farmer.totalDue)}
             </p>
+            {farmer.openingDue > 0 && (
+              <p className="text-sm text-gray-500">
+                {t.farmers.openingDue}: {formatCurrency(farmer.openingDue)}
+              </p>
+            )}
             {farmer.alert === "amber" && (
               <p className="text-sm text-amber-700">{t.farmers.alertAmber} · {farmer.daysOverdue} {t.farmers.daysOverdue}</p>
             )}
@@ -112,12 +158,44 @@ export default function FarmerProfilePage() {
               <p className="text-sm text-red-700">{t.farmers.alertRed} · {farmer.daysOverdue} {t.farmers.daysOverdue}</p>
             )}
           </div>
-          <Link href={`/dashboard/sell?farmerId=${farmer.id}`}>
-            <Button className="min-h-11 gap-2">
-              <Store size={18} /> {t.farmers.sellToFarmer}
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {farmer.totalDue > 0 && (
+              <Button className="min-h-11 gap-2" variant="outline" onClick={() => { setShowCollect(true); setCollectAmount(farmer.totalDue); }}>
+                <Banknote size={18} /> {t.farmers.collectPayment}
+              </Button>
+            )}
+            <Link href={`/dashboard/sell?farmerId=${farmer.id}`}>
+              <Button className="min-h-11 gap-2">
+                <Store size={18} /> {t.farmers.sellToFarmer}
+              </Button>
+            </Link>
+          </div>
         </div>
+      </div>
+
+      <h2 className="mb-3 text-lg font-semibold">{t.farmers.paymentHistory}</h2>
+      <div className="mb-6 space-y-2">
+        {payments.map((p) => (
+          <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold text-emerald-700">{formatCurrency(p.amount)}</p>
+                <p className="text-xs text-gray-500">{formatDateTime(p.createdAt, locale)}</p>
+                {p.note && <p className="text-xs text-gray-500">{p.note}</p>}
+              </div>
+            </div>
+            {p.allocations.length > 0 && (
+              <ul className="mt-2 space-y-1 text-xs text-gray-500">
+                {p.allocations.map((a, i) => (
+                  <li key={i}>
+                    {a.label}: {formatCurrency(a.amount)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+        {payments.length === 0 && <p className="text-center text-gray-500 py-4">{t.farmers.noPaymentsYet}</p>}
       </div>
 
       <h2 className="mb-3 text-lg font-semibold">{t.farmers.salesHistory}</h2>
@@ -133,7 +211,7 @@ export default function FarmerProfilePage() {
                 </p>
               </div>
               {Number(sale.dueAmount) > 0 && (
-                <Button size="sm" variant="outline" onClick={() => openPayment(sale)}>
+                <Button size="sm" variant="outline" onClick={() => openSalePayment(sale)}>
                   {t.farmers.collectPayment}
                 </Button>
               )}
@@ -148,14 +226,32 @@ export default function FarmerProfilePage() {
         {sales.length === 0 && <p className="text-center text-gray-500 py-6">{t.common.noData}</p>}
       </div>
 
+      {showCollect && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <h3 className="font-semibold mb-1">{t.farmers.collectPayment}</h3>
+            <p className="mb-3 text-sm text-gray-500">{t.farmers.collectHelp}</p>
+            <Label>{t.farmers.paymentAmount}</Label>
+            <NumberInput value={collectAmount} onChange={setCollectAmount} className="mb-3" />
+            <Label>{t.common.notes} ({t.common.optional})</Label>
+            <Input value={collectNote} onChange={(e) => setCollectNote(e.target.value)} className="mb-4" />
+            <div className="flex gap-2">
+              <Button onClick={saveManualPayment} disabled={collectAmount <= 0}>{t.common.save}</Button>
+              <Button variant="outline" onClick={() => setShowCollect(false)}>{t.common.cancel}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {paySaleId && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
           <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <h3 className="font-semibold mb-3">{t.farmers.collectPayment}</h3>
-            <Label>{t.common.paid}</Label>
-            <NumberInput value={paidAmount} onChange={setPaidAmount} className="mb-4" />
+            <h3 className="font-semibold mb-1">{t.farmers.collectPayment}</h3>
+            <p className="mb-3 text-sm text-gray-500">{t.farmers.collectSaleHelp}</p>
+            <Label>{t.farmers.paymentAmount}</Label>
+            <NumberInput value={payAmount} onChange={setPayAmount} className="mb-4" />
             <div className="flex gap-2">
-              <Button onClick={savePayment}>{t.common.save}</Button>
+              <Button onClick={saveSalePayment} disabled={payAmount <= 0}>{t.common.save}</Button>
               <Button variant="outline" onClick={() => setPaySaleId(null)}>{t.common.cancel}</Button>
             </div>
           </div>
