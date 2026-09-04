@@ -1,4 +1,5 @@
 import type { PaymentStatus, Prisma } from "@/generated/prisma/client";
+import { getFarmerTotalDueInTx } from "@/lib/farmers/balance";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -38,9 +39,9 @@ async function applyToSaleDue(
 
   const due = Number(sale.dueAmount);
   const applied = Math.min(due, params.amount);
-  const newPaid = Number(sale.paidAmount) + applied;
-  const newDue = due - applied;
   const total = Number(sale.totalAmount);
+  const newPaid = Math.min(total, Number(sale.paidAmount) + applied);
+  const newDue = Math.max(0, total - newPaid);
 
   await tx.sale.update({
     where: { id: params.saleId },
@@ -105,6 +106,16 @@ export async function collectFarmerPayment(
     where: { id: params.farmerId, shopId: params.shopId },
   });
   if (!farmer) throw new Error("Farmer not found");
+
+  const totalDue = await getFarmerTotalDueInTx(tx, params.shopId, params.farmerId);
+  if (totalDue <= 0) {
+    throw new Error("This farmer has no due balance to collect");
+  }
+  if (params.amount > totalDue + 0.001) {
+    throw new Error(
+      `Cannot collect more than due balance. Farmer owes ৳${totalDue.toFixed(2)}, you entered ৳${params.amount.toFixed(2)}`
+    );
+  }
 
   let remaining = params.amount;
   const allocations: PaymentAllocation[] = [];

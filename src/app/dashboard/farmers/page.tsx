@@ -118,7 +118,12 @@ export default function FarmersPage() {
   };
 
   const saveCollect = () => {
-    if (!collectFarmerId || collectAmount <= 0) return;
+    if (!collectFarmerId || collectAmount <= 0 || loading) return;
+    const f = farmers.find((x) => x.id === collectFarmerId);
+    if (f && collectAmount > f.totalDue) {
+      alert(`${t.farmers.maxCollect}: ${formatCurrency(f.totalDue)}`);
+      return;
+    }
     confirm(async () => {
       setLoading(true);
       try {
@@ -247,8 +252,23 @@ export default function FarmersPage() {
           <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
             <h3 className="font-semibold mb-1">{t.farmers.collectPayment}</h3>
             <p className="mb-3 text-sm text-gray-500">{t.farmers.collectHelp}</p>
+            {(() => {
+              const f = farmers.find((x) => x.id === collectFarmerId);
+              return f && f.totalDue > 0 ? (
+                <p className="mb-2 text-sm text-orange-600">
+                  {t.farmers.maxCollect}: {formatCurrency(f.totalDue)}
+                </p>
+              ) : null;
+            })()}
             <Label>{t.farmers.paymentAmount}</Label>
-            <NumberInput value={collectAmount} onChange={setCollectAmount} className="mb-4" />
+            <NumberInput
+              value={collectAmount}
+              onChange={(v) => {
+                const f = farmers.find((x) => x.id === collectFarmerId);
+                setCollectAmount(f ? Math.min(v, f.totalDue) : v);
+              }}
+              className="mb-4"
+            />
             <div className="flex gap-2">
               <Button onClick={saveCollect} disabled={collectAmount <= 0}>{t.common.save}</Button>
               <Button variant="outline" onClick={() => setCollectFarmerId(null)}>{t.common.cancel}</Button>
