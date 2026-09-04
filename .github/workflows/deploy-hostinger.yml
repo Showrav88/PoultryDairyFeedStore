@@ -37,27 +37,48 @@ jobs:
           HEALTH_URL="${VPS_DEPLOY_URL%/api/deploy}/api/health"
 
           echo "Deploying commit ${GITHUB_SHA} via webhook"
-          response=$(curl -sS --max-time 120 -w "\nHTTP_CODE:%{http_code}" -X POST "$VPS_DEPLOY_URL" \
-            -H "Authorization: Bearer ${DEPLOY_WEBHOOK_SECRET}" \
-            -H "Content-Type: application/json" \
-            -d "{\"ref\":\"${GITHUB_REF}\",\"sha\":\"${GITHUB_SHA}\"}")
+          code=""
+          body=""
+          for attempt in $(seq 1 6); do
+            echo "Webhook attempt ${attempt}/6 ..."
+            response=$(curl -sS --connect-timeout 15 --max-time 45 -w "\nHTTP_CODE:%{http_code}" -X POST "$VPS_DEPLOY_URL" \
+              -H "Authorization: Bearer ${DEPLOY_WEBHOOK_SECRET}" \
+              -H "Content-Type: application/json" \
+              -d "{\"ref\":\"${GITHUB_REF}\",\"sha\":\"${GITHUB_SHA}\"}" || true)
 
-          body="${response%HTTP_CODE:*}"
-          code="${response##*HTTP_CODE:}"
-          echo "HTTP $code"
-          echo "$body"
+            body="${response%HTTP_CODE:*}"
+            code="${response##*HTTP_CODE:}"
+            echo "HTTP ${code:-000}"
+            echo "$body"
+
+            if [[ "$code" == "202" || "$code" == "200" ]]; then
+              break
+            fi
+            if [[ "$attempt" -lt 6 ]]; then
+              echo "Webhook not accepted yet, retrying in 20s (VPS may be restarting)..."
+              sleep 20
+            fi
+          done
 
           if [[ "$code" != "202" && "$code" != "200" ]]; then
-            echo "::error::Deploy webhook failed with HTTP $code"
+            echo "::error::Deploy webhook failed with HTTP ${code:-timeout}"
             exit 1
           fi
 
           echo "Waiting for app health at $HEALTH_URL ..."
           for attempt in $(seq 1 60); do
-            if curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null; then
-              echo "Health check passed (attempt $attempt)"
-              echo "Deploy finished successfully."
-              exit 0
+            health_json=$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null || true)
+            if [[ -n "$health_json" ]]; then
+              echo "$health_json"
+              deployed_sha=$(echo "$health_json" | sed -n 's/.*"deploySha":"\([^"]*\)".*/\1/p')
+              short_github_sha="${GITHUB_SHA:0:7}"
+              if [[ -n "$deployed_sha" && "$deployed_sha" != "$short_github_sha" ]]; then
+                echo "Health OK but deploySha=$deployed_sha (expected $short_github_sha) — still deploying..."
+              else
+                echo "Health check passed (attempt $attempt)"
+                echo "Deploy finished successfully."
+                exit 0
+              fi
             fi
             echo "Not healthy yet ($attempt/60)..."
             sleep 10

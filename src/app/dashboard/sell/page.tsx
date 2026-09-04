@@ -276,6 +276,11 @@ export default function SellCounterPage() {
 
   return (
     <>
+      <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+        <p className="font-semibold">{t.sell.pricingNotice}</p>
+        <p className="mt-1">{t.sell.tapProductHint}</p>
+      </div>
+
       <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
         <p className="font-semibold">Stock comes from Purchases</p>
         <p className="mt-1">If quantity shows 0, go to Purchases and buy bags for that product first. Tap Refresh if you just added stock.</p>
@@ -365,6 +370,11 @@ export default function SellCounterPage() {
               {p.inventory.formattedOpenBag && (
                 <p className="text-xs text-orange-500">Open: {p.inventory.formattedOpenBag}</p>
               )}
+              {p.sellPrice > 0 && (
+                <p className="text-xs text-gray-500">
+                  {t.sell.suggestedOnly}: {formatCurrency(p.sellPrice)}
+                </p>
+              )}
             </button>
           ))}
         </div>
@@ -403,9 +413,10 @@ export default function SellCounterPage() {
                     <p className="text-orange-700 dark:text-orange-300">{t.sell.openBagEmpty}</p>
                   )}
                   <p className="text-emerald-700 dark:text-emerald-300">{t.sell.openBagFinished}</p>
-                  {selectedProduct.inventory.formattedAvgCostPerKg && (
-                    <p><strong>{t.sell.avgBuyCost}:</strong> {selectedProduct.inventory.formattedAvgCostPerKg}</p>
-                  )}
+                  <p>
+                    <strong>{t.sell.avgBuyCost}:</strong>{" "}
+                    {selectedProduct.inventory.formattedAvgCostPerKg ?? t.sell.noAvgCostYet}
+                  </p>
                   {sellMarginPerKg !== null && sellPrice > 0 && (
                     <p>
                       <strong>{t.sell.sellMargin}:</strong>{" "}
@@ -586,7 +597,7 @@ export default function SellCounterPage() {
               </div>
               <div>
                 <Label>
-                  {sellMode === "full_bag" ? t.sell.pricePerBag : t.sell.sellPrice}
+                  {sellMode === "full_bag" ? t.sell.pricePerBag : t.sell.sellPriceNow}
                 </Label>
                 <Input
                   type="number"
@@ -598,10 +609,12 @@ export default function SellCounterPage() {
                     setStockError("");
                   }}
                 />
-                {selectedProduct.sellPrice > 0 && (
+                {selectedProduct.sellPrice > 0 ? (
                   <p className="mt-1 text-xs text-gray-500">
-                    {t.sell.suggestedOnly}: {formatCurrency(selectedProduct.sellPrice)} (not auto-filled)
+                    {t.sell.suggestedOnly}: {formatCurrency(selectedProduct.sellPrice)} ({t.sell.notAutoFilled})
                   </p>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500">{t.sell.enterSellPrice}</p>
                 )}
               </div>
             </div>
