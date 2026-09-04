@@ -1,10 +1,10 @@
 import { createHash, timingSafeEqual } from "crypto";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { spawn } from "child_process";
+import { readFileSync, existsSync } from "fs";
 import { NextRequest, NextResponse } from "next/server";
 
-const execFileAsync = promisify(execFile);
 const DEPLOY_CMD = "/usr/local/sbin/deploy-newproject";
+const DEPLOY_LOG = "/var/log/newproject-deploy.log";
 
 function normalizeSecret(value: string | undefined): string {
   return (value ?? "").trim().replace(/^["']|["']$/g, "");
@@ -14,6 +14,16 @@ function safeEqual(a: string, b: string): boolean {
   const aHash = createHash("sha256").update(a).digest();
   const bHash = createHash("sha256").update(b).digest();
   return timingSafeEqual(aHash, bHash);
+}
+
+function tailLog(maxLines = 80): string | undefined {
+  if (!existsSync(DEPLOY_LOG)) return undefined;
+  try {
+    const lines = readFileSync(DEPLOY_LOG, "utf8").trim().split("\n");
+    return lines.slice(-maxLines).join("\n");
+  } catch {
+    return undefined;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -37,29 +47,21 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const sha = typeof body.sha === "string" ? body.sha : "unknown";
 
-  try {
-    const { stdout, stderr } = await execFileAsync("sudo", [DEPLOY_CMD], {
-      timeout: 10 * 60 * 1000,
-      maxBuffer: 10 * 1024 * 1024,
-    });
+  // Run deploy in background so service restart does not kill this request.
+  const child = spawn(
+    "sudo",
+    ["bash", "-lc", `${DEPLOY_CMD} >> ${DEPLOY_LOG} 2>&1`],
+    { detached: true, stdio: "ignore" }
+  );
+  child.unref();
 
-    return NextResponse.json({
-      status: "ok",
+  return NextResponse.json(
+    {
+      status: "accepted",
       sha,
-      output: stdout.trim(),
-      warnings: stderr.trim() || undefined,
-    });
-  } catch (error) {
-    const err = error as { stdout?: string; stderr?: string; message?: string };
-    return NextResponse.json(
-      {
-        status: "error",
-        sha,
-        error: err.message ?? "Deploy failed",
-        output: err.stdout?.trim(),
-        details: err.stderr?.trim(),
-      },
-      { status: 500 }
-    );
-  }
+      message: "Deploy started in background. Check /api/health and /var/log/newproject-deploy.log on VPS.",
+      logTail: tailLog(20),
+    },
+    { status: 202 }
+  );
 }
