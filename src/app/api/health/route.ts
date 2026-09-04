@@ -4,23 +4,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 function readDeploySha(): string | null {
-  const candidates = [
-    join(process.cwd(), ".deploy-sha"),
-    process.env.DEPLOY_SHA,
-  ];
-  for (const value of candidates) {
-    if (!value) continue;
-    if (value.includes("/") || value.includes("\\")) {
-      try {
-        if (existsSync(value)) {
-          return readFileSync(value, "utf8").trim() || null;
-        }
-      } catch {
-        continue;
-      }
-    } else {
-      return value.trim() || null;
+  if (process.env.DEPLOY_SHA?.trim()) {
+    return process.env.DEPLOY_SHA.trim();
+  }
+  const shaFile = join(process.cwd(), ".deploy-sha");
+  try {
+    if (existsSync(shaFile)) {
+      return readFileSync(shaFile, "utf8").trim() || null;
     }
+  } catch {
+    return null;
   }
   return null;
 }
