@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { addStock } from "@/lib/inventory/khucra";
+import { computeWeightedAvgCost } from "@/lib/inventory/avg-cost";
 
 const purchaseSchema = z.object({
   buyerId: z.string(),
@@ -74,9 +75,20 @@ export async function POST(request: Request) {
           item.quantity
         );
 
+        const addedUnits = item.quantity * product.basePackageSize;
+        const newAvgCost = computeWeightedAvgCost(
+          product.stockInSmallestUnit,
+          Number(product.avgCostPerSmallestUnit),
+          addedUnits,
+          item.costPriceTotal
+        );
+
         await tx.product.update({
           where: { id: item.productId },
-          data: stockResult.newState,
+          data: {
+            ...stockResult.newState,
+            avgCostPerSmallestUnit: newAvgCost,
+          },
         });
       }
 

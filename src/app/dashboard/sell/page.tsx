@@ -109,7 +109,7 @@ export default function SellCounterPage() {
   const selectProduct = (p: Product) => {
     setSelectedProduct(p);
     setSellUnit(p.allowedSellUnits[0] ?? 250);
-    setSellPrice(p.sellPrice);
+    setSellPrice(0);
     setUnitCount(1);
     setSellMode("khucra");
     setCustomAmount(1);
@@ -163,11 +163,27 @@ export default function SellCounterPage() {
     ? (sellPrice / effectiveSellUnit() - selectedProduct.inventory.avgCostPerSmallestUnit) * 1000
     : null;
 
+  const lineEstProfit = selectedProduct && selectedProduct.inventory.avgCostPerSmallestUnit && sellPrice > 0 && effectiveSellUnit() > 0
+    ? (sellPrice * unitCount) - (getLineStockAmount(effectiveSellUnit(), unitCount) * selectedProduct.inventory.avgCostPerSmallestUnit)
+    : null;
+
+  const cartEstProfit = cart.reduce((sum, item) => {
+    const product = products.find((p) => p.id === item.productId);
+    const avg = product?.inventory.avgCostPerSmallestUnit ?? 0;
+    const qty = item.quantityInSmallestUnit * item.unitCount;
+    const revenue = item.pricePerUnit * item.unitCount;
+    return sum + (revenue - qty * avg);
+  }, 0);
+
   const addToCart = () => {
     if (!selectedProduct) return;
     const qty = effectiveSellUnit();
     if (qty <= 0) {
       setStockError("Enter a valid sell quantity");
+      return;
+    }
+    if (sellPrice <= 0) {
+      setStockError(t.sell.enterSellPrice);
       return;
     }
 
@@ -574,11 +590,27 @@ export default function SellCounterPage() {
                 </Label>
                 <Input
                   type="number"
-                  value={sellPrice}
-                  onChange={(e) => setSellPrice(parseFloat(e.target.value))}
+                  min={0}
+                  placeholder={t.sell.enterSellPrice}
+                  value={formatOptionalAmount(sellPrice)}
+                  onChange={(e) => {
+                    setSellPrice(parseOptionalAmountInput(e.target.value));
+                    setStockError("");
+                  }}
                 />
+                {selectedProduct.sellPrice > 0 && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    {t.sell.suggestedOnly}: {formatCurrency(selectedProduct.sellPrice)} (not auto-filled)
+                  </p>
+                )}
               </div>
             </div>
+
+            {lineEstProfit !== null && (
+              <p className={`text-sm mb-3 font-medium ${lineEstProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {t.sell.estProfit}: {formatCurrency(lineEstProfit)}
+              </p>
+            )}
 
             <p className="text-sm mb-3">
               Line total: <strong>{formatCurrency(sellPrice * unitCount)}</strong>
@@ -645,6 +677,12 @@ export default function SellCounterPage() {
             <span>{t.common.total}</span>
             <span className="text-emerald-600">{formatCurrency(cartTotal)}</span>
           </div>
+
+          {cart.length > 0 && cartEstProfit !== 0 && (
+            <p className={`text-sm mb-3 font-medium ${cartEstProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              {t.sell.cartEstProfit}: {formatCurrency(cartEstProfit)}
+            </p>
+          )}
 
           {cartTotal > paidAmount && (
             <p className="text-sm text-orange-500 mb-2">
