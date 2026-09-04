@@ -76,23 +76,40 @@ jobs:
 
             if [[ -n "$health_json" ]]; then
               echo "$health_json"
-              deployed_sha=$(echo "$health_json" | sed -n 's/.*"deploySha":"\([^"]*\)".*/\1/p')
-              deploy_state=$(echo "$health_json" | sed -n 's/.*"deployState":"\([^"]*\)".*/\1/p')
+              deployed_sha=$(echo "$health_json" | jq -r '.deploySha // empty')
+              deploy_state=$(echo "$health_json" | jq -r '.deployState // empty')
+            else
+              deployed_sha=""
+              deploy_state=""
+            fi
 
-              if [[ "$deploy_state" == "failed" ]]; then
-                echo "::error::VPS deploy failed"
-                echo "$status_json"
-                exit 1
+            status_sha=""
+            deploy_running="false"
+            if [[ -n "$status_json" ]]; then
+              status_sha=$(echo "$status_json" | jq -r '.deployStatus.sha // empty')
+              deploy_running=$(echo "$status_json" | jq -r '.deployRunning // false')
+              if [[ "$attempt" == "1" || "$(( attempt % 6 ))" == "0" ]]; then
+                echo "$status_json" | jq -c '{deploySha, deployRunning, deployStatus}' 2>/dev/null || echo "$status_json"
               fi
+            fi
 
-              if [[ -n "$deployed_sha" && "$deployed_sha" == "$short_github_sha" ]]; then
-                echo "Deploy finished successfully (sha ${deployed_sha}, attempt ${attempt})."
+            if [[ "$deploy_state" == "failed" ]]; then
+              echo "::error::VPS deploy failed"
+              echo "$status_json"
+              exit 1
+            fi
+
+            if [[ "$deployed_sha" == "$short_github_sha" || "$status_sha" == "$short_github_sha" ]]; then
+              if [[ "$deploy_state" == "ready" || "$deploy_running" == "false" ]]; then
+                echo "Deploy finished successfully (sha ${deployed_sha:-$status_sha}, attempt ${attempt})."
                 exit 0
               fi
+            fi
 
-              echo "Still deploying: deploySha=${deployed_sha:-unknown} state=${deploy_state:-unknown} (attempt ${attempt}/120)"
+            if [[ "$deploy_running" == "true" || "$deploy_state" =~ ^(started|pulling|building|restarting|running)$ ]]; then
+              echo "Deploy in progress: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-unknown} (attempt ${attempt}/120)"
             else
-              echo "Health not reachable yet (${attempt}/120)..."
+              echo "Still waiting: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-unknown} (attempt ${attempt}/120)"
             fi
 
             sleep 10
@@ -101,4 +118,8 @@ jobs:
           echo "::error::Deploy did not reach commit ${short_github_sha} within 20 minutes"
           echo "Deploy status:"
           curl -fsS --max-time 15 "$STATUS_URL" 2>/dev/null || true
+          echo ""
+          echo "If deploySha is stuck on an old commit, on VPS run:"
+          echo "  sudo bash /var/www/NEWPROJECT/deploy/unlock-deploy.sh --force"
+          echo "  sudo /usr/local/sbin/deploy-newproject"
           exit 1

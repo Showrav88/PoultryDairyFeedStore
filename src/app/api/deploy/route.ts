@@ -1,9 +1,10 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { spawn } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, openSync } from "fs";
 import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { tailDeployLog } from "@/lib/deploy/log-tail";
+import { ensureDeployLogDir, writeDeployStatus } from "@/lib/deploy/status";
 
 function normalizeSecret(value: string | undefined): string {
   return (value ?? "").trim().replace(/^["']|["']$/g, "");
@@ -35,6 +36,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const sha = typeof body.sha === "string" ? body.sha : "unknown";
+  const shortSha = sha.length >= 7 ? sha.slice(0, 7) : sha;
 
   const webhookScript = join(process.cwd(), "deploy/webhook-deploy.sh");
   const deployScript = join(process.cwd(), "deploy/deploy-via-app.sh");
@@ -52,7 +54,43 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const child = spawn("bash", [script], { detached: true, stdio: "ignore", cwd: process.cwd() });
+  try {
+    writeDeployStatus("started", shortSha, "Webhook accepted, deploy starting");
+  } catch (err) {
+    console.error("Could not write deploy status:", err);
+  }
+
+  const logPath = ensureDeployLogDir();
+  let logFd: number;
+  try {
+    logFd = openSync(logPath, "a");
+  } catch (err) {
+    console.error("Could not open deploy log:", err);
+    return NextResponse.json(
+      { error: "Could not open deploy log for writing" },
+      { status: 500 }
+    );
+  }
+
+  const child = spawn("bash", [script], {
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      TARGET_SHA: shortSha,
+      DEPLOY_TRIGGER: "webhook",
+    },
+  });
+
+  child.on("error", (err) => {
+    try {
+      writeDeployStatus("failed", shortSha, `Deploy spawn failed: ${err.message}`);
+    } catch {
+      /* ignore */
+    }
+  });
+
   child.unref();
 
   const mode =
@@ -65,7 +103,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(
     {
       status: "accepted",
-      sha,
+      sha: shortSha,
       mode,
       message:
         mode === "webhook"

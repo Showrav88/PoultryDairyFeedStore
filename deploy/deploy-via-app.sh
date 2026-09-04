@@ -57,9 +57,17 @@ start_service() {
 
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
-  echo "Another app deploy is already running."
-  write_status "running" "" "Deploy already in progress"
-  exit 1
+  lock_age=$(( $(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0) ))
+  if [[ "$lock_age" -gt 2700 ]]; then
+    echo "Stale app deploy lock (${lock_age}s) — clearing."
+    rm -f "$LOCK_FILE"
+    exec 200>"$LOCK_FILE"
+    flock -n 200 || { write_status "failed" "" "Could not acquire deploy lock"; exit 1; }
+  else
+    echo "Another app deploy is already running (lock age ${lock_age}s)."
+    write_status "running" "" "Deploy already in progress"
+    exit 1
+  fi
 fi
 
 cd "$APP_DIR"
