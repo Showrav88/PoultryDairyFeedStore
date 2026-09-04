@@ -7,39 +7,79 @@ export interface SellPreset {
 
 export const PRODUCT_TYPE_TEMPLATES: Record<
   string,
-  { weightUnit: ProductUnitType; basePackageSize: number; allowedSellUnits: number[]; label: string }
+  {
+    weightUnit: ProductUnitType;
+    basePackageSize: number;
+    allowedSellUnits: number[];
+    label: string;
+    description: string;
+    defaultBagSizeKg?: number;
+    defaultBottleMl?: number;
+  }
 > = {
   feed_bag: {
-    label: "Feed (Bag/Khucra)",
+    label: "Feed / Bag Product",
+    description: "Buy full bags in Purchases. Sell khucra (small qty) or full bag on counter.",
     weightUnit: "BAG",
     basePackageSize: 50000,
-    allowedSellUnits: [100, 250, 500, 1000, 5000, 50000],
+    defaultBagSizeKg: 50,
+    allowedSellUnits: [100, 250, 500, 1000, 2000, 5000, 50000],
   },
   eggs: {
-    label: "Eggs (Piece)",
+    label: "Eggs / Pieces",
+    description: "Sold by piece or dozen. Stock counted in pieces.",
     weightUnit: "PIECE",
     basePackageSize: 1,
     allowedSellUnits: [1, 6, 12, 30],
   },
   medicine: {
-    label: "Medicine (Piece/Bottle)",
+    label: "Medicine / Small Item",
+    description: "Sold per piece or bottle. One unit = one item.",
     weightUnit: "PIECE",
     basePackageSize: 1,
     allowedSellUnits: [1],
   },
   liquid: {
-    label: "Liquid (ml/Liter)",
+    label: "Liquid (Medicine/Oil)",
+    description: "Buy bottles in Purchases. Sell by ml or full bottle.",
     weightUnit: "ML",
     basePackageSize: 1000,
+    defaultBottleMl: 1000,
     allowedSellUnits: [100, 250, 500, 1000],
   },
   generic: {
-    label: "Generic Item",
+    label: "Other / Generic",
+    description: "Simple count-based product.",
     weightUnit: "GENERIC",
     basePackageSize: 1,
     allowedSellUnits: [1],
   },
 };
+
+export function gramsToDisplayKg(grams: number): number {
+  return grams / 1000;
+}
+
+export function kgToGrams(kg: number): number {
+  return Math.round(kg * 1000);
+}
+
+export function getPackageSizeLabel(weightUnit: string): string {
+  switch (weightUnit) {
+    case "BAG":
+    case "GRAM":
+    case "KG":
+      return "Bag size (kg)";
+    case "ML":
+    case "LITER":
+      return "Bottle size (ml)";
+    case "PIECE":
+    case "GENERIC":
+      return "Units per pack";
+    default:
+      return "Package size";
+  }
+}
 
 export function getSellPresets(weightUnit: string, basePackageSize: number): SellPreset[] {
   const presets: SellPreset[] = [];
