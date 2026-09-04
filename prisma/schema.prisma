@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Multi-tenant Shop (single admin per shop) ───────────────────────────────
+
+model Shop {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  shopName         String
+  shopNumber       String   @unique
+  phone            String
+  passwordHash     String
+  productIdCounter Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  products           Product[]
+  buyers             Buyer[]
+  purchases          Purchase[]
+  sales              Sale[]
+  wallet             Wallet?
+  walletTransactions WalletTransaction[]
+  auditLogs          AuditLog[]
+}
+
+// ─── Product Catalogue ───────────────────────────────────────────────────────
+
+enum WeightUnit {
+  GENERIC
+  GRAM
+  KG
+  LITER
+  ML
+  BAG
+  PIECE
+}
+
+model Product {
+  id        String @id @default(cuid())
+  shopId    String
+  productId String // Human-readable: "LayerFeed-000001"
+
+  name      String
+  imageUrl  String?
+  weightUnit WeightUnit @default(GENERIC)
+
+  // Package size in smallest unit (grams/ml). e.g. 50kg bag = 50000
+  basePackageSize Int @default(1000)
+
+  // Reference sell price (analytics only, not used at sell time)
+  sellPrice Decimal @default(0) @db.Decimal(12, 2)
+
+  // Allowed khugra sell units in smallest unit, e.g. [100, 250, 500, 1000, 50000]
+  allowedSellUnits Int[] @default([100, 250, 500, 1000])
+
+  // ─── Khugra Inventory Tracking ───────────────────────────────────────────
+  // Total stock always tracked in smallest unit (grams/ml)
+  stockInSmallestUnit Int @default(0)
+  // Unopened full bags/packages
+  closedPackages      Int @default(0)
+  // Remaining in currently open bag (0 = no bag open)
+  openPackageRemaining Int @default(0)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop          Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  purchaseItems PurchaseItem[]
+  saleItems     SaleItem[]
+
+  @@unique([shopId, productId])
+  @@index([shopId])
+}
+
+// ─── Buyers (suppliers) ─────────────────────────────────────────────────────
+
+model Buyer {
+  id        String   @id @default(cuid())
+  shopId    String
+  name      String
+  phone     String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop      Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([shopId])
+  @@index([shopId, name])
+  @@index([shopId, phone])
+}
+
+// ─── Purchases (Buy from buyer) ──────────────────────────────────────────────
+
+enum PaymentStatus {
+  DUE
+  PARTIAL
+  PAID
+}
+
+model Purchase {
+  id          String        @id @default(cuid())
+  shopId      String
+  buyerId     String
+  totalCost   Decimal       @db.Decimal(12, 2)
+  paidAmount  Decimal       @default(0) @db.Decimal(12, 2)
+  dueAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  status      PaymentStatus @default(DUE)
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  shop  Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  buyer Buyer          @relation(fields: [buyerId], references: [id])
+  items PurchaseItem[]
+
+  @@index([shopId])
+  @@index([shopId, createdAt])
+}
+
+model PurchaseItem {
+  id              String  @id @default(cuid())
+  purchaseId      String
+  productId       String
+  quantity        Int     // Number of packages/bags bought
+  costPricePerUnit Decimal @db.Decimal(12, 2)
+  costPriceTotal  Decimal @db.Decimal(12, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+}
+
+// ─── Sales (Sell Counter) ────────────────────────────────────────────────────
+
+model Sale {
+  id            String        @id @default(cuid())
+  shopId        String
+  customerName  String?
+  customerPhone String?
+  totalAmount   Decimal       @db.Decimal(12, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(12, 2)
+  dueAmount     Decimal       @default(0) @db.Decimal(12, 2)
+  status        PaymentStatus @default(PAID)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  shop  Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items SaleItem[]
+
+  @@index([shopId])
+  @@index([shopId, createdAt])
+  @@index([shopId, customerPhone])
+  @@index([shopId, customerName])
+}
+
+model SaleItem {
+  id               String  @id @default(cuid())
+  saleId           String
+  productId        String
+  // Quantity sold in smallest unit (e.g. 250 for 250g khugra)
+  quantityInSmallestUnit Int
+  // Display label e.g. "250g", "1 Bag"
+  sellUnitLabel    String
+  pricePerUnit     Decimal @db.Decimal(12, 2)
+  lineTotal        Decimal @db.Decimal(12, 2)
+  // How many "units" at pricePerUnit (e.g. 1 for one 250g portion)
+  unitCount        Int     @default(1)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+}
+
+// ─── Wallet ──────────────────────────────────────────────────────────────────
+
+enum WalletTxType {
+  DEPOSIT
+  WITHDRAW
+  EXPENSE
+  SALE_INCOME
+  PURCHASE_EXPENSE
+  ADJUSTMENT
+}
+
+enum ExpenseCategory {
+  FAMILY
+  UTILITIES
+  LAW_AND_SUIT
+  GUEST_BILL
+  STAFF_SALARY
+  OTHER
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  shopId    String   @unique
+  balance   Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model WalletTransaction {
+  id          String          @id @default(cuid())
+  shopId      String
+  type        WalletTxType
+  category    ExpenseCategory?
+  amount      Decimal         @db.Decimal(12, 2)
+  note        String?
+  referenceId String? // Links to sale/purchase id for auto entries
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([shopId, createdAt])
+}
+
+// ─── Audit / History Log ─────────────────────────────────────────────────────
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum AuditEntity {
+  PRODUCT
+  BUYER
+  PURCHASE
+  SALE
+  WALLET
+  SHOP
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  shopId     String
+  entity     AuditEntity
+  entityId   String
+  action     AuditAction
+  summary    String
+  oldData    Json?
+  newData    Json?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([shopId, entity])
+  @@index([shopId, createdAt])
+}
