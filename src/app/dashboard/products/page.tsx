@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { Plus, Package, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
-import { formatCurrency, formatOptionalAmount, parseOptionalAmountInput } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import {
   PRODUCT_TYPE_TEMPLATES,
   getSellPresets,
@@ -65,7 +65,7 @@ export default function ProductsPage() {
   const [productType, setProductType] = useState<ProductTypeKey>("feed_bag");
   const [name, setName] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [packageSize, setPackageSize] = useState(50);
+  const [packageSize, setPackageSize] = useState(0);
   const [sellPrice, setSellPrice] = useState(0);
   const [allowedSellUnits, setAllowedSellUnits] = useState<number[]>(
     PRODUCT_TYPE_TEMPLATES.feed_bag.allowedSellUnits
@@ -80,9 +80,7 @@ export default function ProductsPage() {
     const template = PRODUCT_TYPE_TEMPLATES[key];
     setProductType(key);
     setAllowedSellUnits(template.allowedSellUnits);
-    if (template.defaultBagSizeKg) setPackageSize(template.defaultBagSizeKg);
-    else if (template.defaultBottleMl) setPackageSize(template.defaultBottleMl);
-    else setPackageSize(template.basePackageSize);
+    setPackageSize(0);
   };
 
   const toggleSellUnit = (value: number) => {
@@ -116,7 +114,7 @@ export default function ProductsPage() {
     name,
     imageUrl: imageUrl || undefined,
     weightUnit: tpl.weightUnit,
-    basePackageSize: packageToBaseSize(tpl.weightUnit, packageSize),
+    basePackageSize: packageToBaseSize(tpl.weightUnit, packageSize > 0 ? packageSize : effectivePackageSize),
     sellPrice,
     allowedSellUnits,
   });
@@ -160,7 +158,12 @@ export default function ProductsPage() {
     }, { message: `Delete product "${p.name}"?` });
   };
 
-  const presets = getSellPresets(tpl.weightUnit, packageToBaseSize(tpl.weightUnit, packageSize));
+  const effectivePackageSize =
+    packageSize > 0
+      ? packageSize
+      : tpl.defaultBagSizeKg ?? tpl.defaultBottleMl ?? tpl.basePackageSize;
+
+  const presets = getSellPresets(tpl.weightUnit, packageToBaseSize(tpl.weightUnit, effectivePackageSize));
   const showPackageSize = productType === "feed_bag" || productType === "liquid";
   const productFormValid =
     name.trim().length > 0 &&
@@ -222,17 +225,15 @@ export default function ProductsPage() {
                 <Label>
                   {productType === "feed_bag" ? t.products.bagSizeKg : t.products.bottleSizeMl} *
                 </Label>
-                <Input
-                  type="number"
-                  min={0.001}
-                  step="any"
+                <NumberInput
                   required
+                  placeholder={productType === "feed_bag" ? "e.g. 50" : "e.g. 500"}
                   value={packageSize}
-                  onChange={(e) => setPackageSize(parseFloat(e.target.value) || 0)}
+                  onChange={setPackageSize}
                 />
                 {productType === "feed_bag" && (
                   <p className="mt-1 text-xs text-gray-500">
-                    When you buy in Purchases, qty = number of {packageSize} kg bags
+                    When you buy in Purchases, qty = number of {effectivePackageSize} kg bags
                   </p>
                 )}
               </div>
@@ -240,14 +241,11 @@ export default function ProductsPage() {
 
             <div>
               <Label>{t.products.referencePrice} *</Label>
-              <Input
-                type="number"
-                min={0.01}
-                step="any"
+              <NumberInput
                 required
-                placeholder="Enter suggested price"
-                value={formatOptionalAmount(sellPrice)}
-                onChange={(e) => setSellPrice(parseOptionalAmountInput(e.target.value))}
+                placeholder={t.common.enterPrice}
+                value={sellPrice}
+                onChange={setSellPrice}
               />
               <p className="mt-1 text-xs text-gray-500">{t.products.referencePriceHelp}</p>
             </div>

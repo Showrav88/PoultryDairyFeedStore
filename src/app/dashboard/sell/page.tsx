@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ShoppingCart, Search, X, Plus, Minus, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
-import { formatCurrency, formatDateTime, formatOptionalAmount, parseOptionalAmountInput } from "@/lib/utils";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import {
   formatFullPackageLabel,
   formatSellUnitLabel,
@@ -84,7 +84,7 @@ export default function SellCounterPage() {
   const [searchResults, setSearchResults] = useState<Sale[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [sellMode, setSellMode] = useState<SellMode>("khucra");
-  const [customAmount, setCustomAmount] = useState(1);
+  const [customAmount, setCustomAmount] = useState(0);
   const [customUnit, setCustomUnit] = useState<CustomSellUnit>("KG");
   const [stockError, setStockError] = useState("");
 
@@ -112,7 +112,7 @@ export default function SellCounterPage() {
     setSellPrice(0);
     setUnitCount(1);
     setSellMode("khucra");
-    setCustomAmount(1);
+    setCustomAmount(0);
     const units = getCustomUnitOptions(p.weightUnit);
     setCustomUnit(units[0]?.value ?? "KG");
     setStockError("");
@@ -537,13 +537,10 @@ export default function SellCounterPage() {
               <div className="mb-3 grid grid-cols-2 gap-3">
                 <div>
                   <Label>Custom quantity</Label>
-                  <Input
-                    type="number"
-                    min={0.001}
-                    step="any"
+                  <NumberInput
+                    placeholder={t.common.enterQty}
                     value={customAmount}
-                    onChange={(e) => setCustomAmount(parseFloat(e.target.value) || 0)}
-                    placeholder="e.g. 5 for 5 kg"
+                    onChange={setCustomAmount}
                   />
                 </div>
                 <div>
@@ -599,13 +596,12 @@ export default function SellCounterPage() {
                 <Label>
                   {sellMode === "full_bag" ? t.sell.pricePerBag : t.sell.sellPriceNow}
                 </Label>
-                <Input
-                  type="number"
-                  min={0}
+                <NumberInput
+                  required
                   placeholder={t.sell.enterSellPrice}
-                  value={formatOptionalAmount(sellPrice)}
-                  onChange={(e) => {
-                    setSellPrice(parseOptionalAmountInput(e.target.value));
+                  value={sellPrice}
+                  onChange={(v) => {
+                    setSellPrice(v);
                     setStockError("");
                   }}
                 />
@@ -676,12 +672,10 @@ export default function SellCounterPage() {
             </div>
             <div>
               <Label>{t.common.paid}</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="0"
-                value={formatOptionalAmount(paidAmount)}
-                onChange={(e) => setPaidAmount(parseOptionalAmountInput(e.target.value))}
+              <NumberInput
+                placeholder={t.common.enterAmount}
+                value={paidAmount}
+                onChange={setPaidAmount}
               />
             </div>
           </div>
