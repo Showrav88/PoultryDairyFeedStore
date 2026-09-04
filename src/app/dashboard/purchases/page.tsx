@@ -68,19 +68,26 @@ export default function PurchasesPage() {
 
   const addItem = () => {
     if (products.length === 0) return;
-    setItems([...items, { productId: products[0].id, quantity: 1, costPricePerUnit: 0, costPriceTotal: 0 }]);
+    setItems([...items, { productId: products[0].id, quantity: 0, costPricePerUnit: 0, costPriceTotal: 0 }]);
   };
 
   const updateItem = (idx: number, field: keyof PurchaseItem, value: number | string) => {
     const updated = [...items];
     updated[idx] = { ...updated[idx], [field]: value };
     if (field === "quantity" || field === "costPricePerUnit") {
-      updated[idx].costPriceTotal = updated[idx].quantity * updated[idx].costPricePerUnit;
+      const qty = Number(updated[idx].quantity) || 0;
+      const unit = Number(updated[idx].costPricePerUnit) || 0;
+      updated[idx].costPriceTotal = qty * unit;
     }
     setItems(updated);
   };
 
   const totalCost = items.reduce((s, i) => s + i.costPriceTotal, 0);
+
+  const purchaseFormValid =
+    Boolean(buyerId) &&
+    items.length > 0 &&
+    items.every((i) => i.quantity > 0 && i.costPricePerUnit > 0);
 
   const handleCreate = () => {
     confirm(async () => {
@@ -161,6 +168,7 @@ export default function PurchasesPage() {
               <Input
                 placeholder={t.buyers.searchByNameOrPhone}
                 value={buyerSearch}
+                required
                 onChange={(e) => {
                   setBuyerSearch(e.target.value);
                   setBuyerId("");
@@ -215,6 +223,7 @@ export default function PurchasesPage() {
                   <select
                     className="w-full h-10 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-900"
                     value={item.productId}
+                    required
                     onChange={(e) => updateItem(idx, "productId", e.target.value)}
                   >
                     {products.map((p) => (
@@ -223,12 +232,27 @@ export default function PurchasesPage() {
                   </select>
                 </div>
                 <div>
-                  <Label>Qty (bags)</Label>
-                  <Input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)} />
+                  <Label>Qty (bags) *</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    required
+                    placeholder="Enter qty"
+                    value={formatOptionalAmount(item.quantity)}
+                    onChange={(e) => updateItem(idx, "quantity", parseOptionalAmountInput(e.target.value))}
+                  />
                 </div>
                 <div>
-                  <Label>{t.purchases.costPerUnit}</Label>
-                  <Input type="number" value={item.costPricePerUnit} onChange={(e) => updateItem(idx, "costPricePerUnit", parseFloat(e.target.value) || 0)} />
+                  <Label>{t.purchases.costPerUnit} *</Label>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step="any"
+                    required
+                    placeholder="Enter unit price"
+                    value={formatOptionalAmount(item.costPricePerUnit)}
+                    onChange={(e) => updateItem(idx, "costPricePerUnit", parseOptionalAmountInput(e.target.value))}
+                  />
                 </div>
                 <div className="flex min-h-10 items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
                   <span className="text-sm font-medium">{formatCurrency(item.costPriceTotal)}</span>
@@ -245,7 +269,7 @@ export default function PurchasesPage() {
               <Plus size={16} /> {t.purchases.addItem}
             </Button>
             <span className="font-bold sm:ml-auto">{t.common.total}: {formatCurrency(totalCost)}</span>
-            <Button className="min-h-11" onClick={handleCreate} disabled={!buyerId || items.length === 0}>{t.common.save}</Button>
+            <Button className="min-h-11" onClick={handleCreate} disabled={!purchaseFormValid || loading}>{t.common.save}</Button>
           </div>
         </div>
       )}
