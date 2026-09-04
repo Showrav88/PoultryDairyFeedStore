@@ -1,15 +1,13 @@
+"use client";
+
+import { useState } from "react";
 import { cn, formatOptionalAmount, parseOptionalAmountInput } from "@/lib/utils";
 
+const inputClassName =
+  "flex h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--input-text)] placeholder:text-[var(--placeholder)] placeholder:italic focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50";
+
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      className={cn(
-        "flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400/45 placeholder:italic focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500/40",
-        className
-      )}
-      {...props}
-    />
-  );
+  return <input className={cn(inputClassName, className)} {...props} />;
 }
 
 type NumberInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> & {
@@ -17,15 +15,30 @@ type NumberInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "value
   onChange: (value: number) => void;
 };
 
-/** Numeric field: blank when 0, faded placeholder, empty input stored as 0 */
-export function NumberInput({ value, onChange, className, ...props }: NumberInputProps) {
+/** Numeric field: blank when 0, keeps partial typing (e.g. 0.), empty → 0 on blur */
+export function NumberInput({ value, onChange, className, onBlur, onFocus, ...props }: NumberInputProps) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? formatOptionalAmount(value);
+
   return (
     <Input
       type="text"
       inputMode="decimal"
       className={className}
-      value={formatOptionalAmount(value)}
-      onChange={(e) => onChange(parseOptionalAmountInput(e.target.value))}
+      value={display}
+      onFocus={(e) => {
+        setDraft(formatOptionalAmount(value));
+        onFocus?.(e);
+      }}
+      onChange={(e) => {
+        const next = e.target.value;
+        setDraft(next);
+        onChange(parseOptionalAmountInput(next));
+      }}
+      onBlur={(e) => {
+        setDraft(null);
+        onBlur?.(e);
+      }}
       {...props}
     />
   );
@@ -34,20 +47,16 @@ export function NumberInput({ value, onChange, className, ...props }: NumberInpu
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   return (
     <label
-      className={cn("text-sm font-medium text-gray-700 dark:text-gray-300", className)}
+      className={cn("text-sm font-medium text-[var(--foreground)]", className)}
       {...props}
     />
   );
 }
 
 export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      className={cn(
-        "flex min-h-[80px] w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400/45 placeholder:italic focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500/40",
-        className
-      )}
-      {...props}
-    />
-  );
+  return <textarea className={cn(inputClassName, "min-h-[80px]", className)} {...props} />;
+}
+
+export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={cn(inputClassName, className)} {...props} />;
 }

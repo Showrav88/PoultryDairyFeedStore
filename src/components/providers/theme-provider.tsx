@@ -9,6 +9,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       attribute="class"
       defaultTheme="light"
       themes={["light", "dark", "night"]}
+      value={{
+        light: "light",
+        dark: "dark",
+        night: "dark night",
+      }}
       enableSystem={false}
     >
       {children}
