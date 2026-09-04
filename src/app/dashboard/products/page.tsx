@@ -6,8 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
-import { formatCurrency } from "@/lib/utils";
-import { PRODUCT_TYPE_TEMPLATES, getSellPresets } from "@/lib/inventory/sell-units";
+import { formatCurrency, formatOptionalAmount, parseOptionalAmountInput } from "@/lib/utils";
+import {
+  PRODUCT_TYPE_TEMPLATES,
+  getSellPresets,
+  gramsToDisplayKg,
+  kgToGrams,
+} from "@/lib/inventory/sell-units";
 
 interface Product {
   id: string;
@@ -25,14 +30,30 @@ interface Product {
   };
 }
 
-const defaultForm = {
-  name: "",
-  imageUrl: "",
-  weightUnit: "BAG",
-  basePackageSize: 50000,
-  sellPrice: 0,
-  allowedSellUnits: [100, 250, 500, 1000, 50000],
-};
+type ProductTypeKey = keyof typeof PRODUCT_TYPE_TEMPLATES;
+
+function detectProductType(weightUnit: string): ProductTypeKey {
+  if (weightUnit === "BAG" || weightUnit === "KG" || weightUnit === "GRAM") return "feed_bag";
+  if (weightUnit === "ML" || weightUnit === "LITER") return "liquid";
+  if (weightUnit === "PIECE") return "eggs";
+  if (weightUnit === "GENERIC") return "generic";
+  return "feed_bag";
+}
+
+function packageDisplaySize(weightUnit: string, basePackageSize: number): number {
+  if (weightUnit === "BAG" || weightUnit === "GRAM" || weightUnit === "KG") {
+    return gramsToDisplayKg(basePackageSize);
+  }
+  if (weightUnit === "ML" || weightUnit === "LITER") return basePackageSize;
+  return basePackageSize;
+}
+
+function packageToBaseSize(weightUnit: string, displaySize: number): number {
+  if (weightUnit === "BAG" || weightUnit === "GRAM" || weightUnit === "KG") {
+    return kgToGrams(displaySize);
+  }
+  return Math.round(displaySize);
+}
 
 export default function ProductsPage() {
   const { t } = useI18n();
@@ -41,49 +62,64 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState(defaultForm);
+  const [productType, setProductType] = useState<ProductTypeKey>("feed_bag");
+  const [name, setName] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [packageSize, setPackageSize] = useState(50);
+  const [sellPrice, setSellPrice] = useState(0);
+  const [allowedSellUnits, setAllowedSellUnits] = useState<number[]>(
+    PRODUCT_TYPE_TEMPLATES.feed_bag.allowedSellUnits
+  );
+
+  const tpl = PRODUCT_TYPE_TEMPLATES[productType];
 
   const load = () => fetch("/api/products").then((r) => r.json()).then((d) => setProducts(d.products ?? []));
   useEffect(() => { load(); }, []);
 
-  const applyTemplate = (key: string) => {
-    const tpl = PRODUCT_TYPE_TEMPLATES[key];
-    if (!tpl) return;
-    setForm((f) => ({
-      ...f,
-      weightUnit: tpl.weightUnit,
-      basePackageSize: tpl.basePackageSize,
-      allowedSellUnits: tpl.allowedSellUnits,
-    }));
+  const applyTemplate = (key: ProductTypeKey) => {
+    const template = PRODUCT_TYPE_TEMPLATES[key];
+    setProductType(key);
+    setAllowedSellUnits(template.allowedSellUnits);
+    if (template.defaultBagSizeKg) setPackageSize(template.defaultBagSizeKg);
+    else if (template.defaultBottleMl) setPackageSize(template.defaultBottleMl);
+    else setPackageSize(template.basePackageSize);
   };
 
   const toggleSellUnit = (value: number) => {
-    setForm((f) => ({
-      ...f,
-      allowedSellUnits: f.allowedSellUnits.includes(value)
-        ? f.allowedSellUnits.filter((u) => u !== value)
-        : [...f.allowedSellUnits, value],
-    }));
+    setAllowedSellUnits((units) =>
+      units.includes(value) ? units.filter((u) => u !== value) : [...units, value]
+    );
   };
 
   const openEdit = (p: Product) => {
+    const type = detectProductType(p.weightUnit);
     setEditingId(p.id);
-    setForm({
-      name: p.name,
-      imageUrl: p.imageUrl ?? "",
-      weightUnit: p.weightUnit,
-      basePackageSize: p.basePackageSize,
-      sellPrice: p.sellPrice,
-      allowedSellUnits: p.allowedSellUnits,
-    });
+    setProductType(type);
+    setName(p.name);
+    setImageUrl(p.imageUrl ?? "");
+    setPackageSize(packageDisplaySize(p.weightUnit, p.basePackageSize));
+    setSellPrice(p.sellPrice);
+    setAllowedSellUnits(p.allowedSellUnits);
     setShowForm(true);
   };
 
   const resetForm = () => {
     setShowForm(false);
     setEditingId(null);
-    setForm(defaultForm);
+    applyTemplate("feed_bag");
+    setName("");
+    setImageUrl("");
+    setSellPrice(0);
   };
+
+  const buildPayload = () => ({
+    name,
+    imageUrl: imageUrl || undefined,
+    weightUnit: tpl.weightUnit,
+    basePackageSize: packageToBaseSize(tpl.weightUnit, packageSize),
+    sellPrice,
+    allowedSellUnits,
+  });
 
   const handleSave = () => {
     confirm(async () => {
@@ -94,7 +130,7 @@ export default function ProductsPage() {
         const res = await fetch(url, {
           method,
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(buildPayload()),
         });
         if (!res.ok) throw new Error((await res.json()).error);
         resetForm();
@@ -105,7 +141,7 @@ export default function ProductsPage() {
         setLoading(false);
         close();
       }
-    }, { message: editingId ? `Update product "${form.name}"?` : `Add product "${form.name}"?` });
+    }, { message: editingId ? `Update product "${name}"?` : `Add product "${name}"?` });
   };
 
   const handleDelete = (p: Product) => {
@@ -124,13 +160,15 @@ export default function ProductsPage() {
     }, { message: `Delete product "${p.name}"?` });
   };
 
-  const presets = getSellPresets(form.weightUnit, form.basePackageSize);
+  const presets = getSellPresets(tpl.weightUnit, packageToBaseSize(tpl.weightUnit, packageSize));
+  const showPackageSize = productType === "feed_bag" || productType === "liquid";
 
   return (
     <div>
       <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/40">
-        <p className="font-semibold">Product types:</p>
-        <p className="mt-1">Feed = Bag + Khucra · Eggs/Medicine = Piece · Liquid = ml/Liter</p>
+        <p className="font-semibold">Simple workflow</p>
+        <p className="mt-1">1. Add product here → 2. Purchase (bags/pieces) → 3. Sell on counter</p>
+        <p className="mt-1 text-blue-800 dark:text-blue-200">{t.products.feedExample}</p>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
@@ -142,58 +180,80 @@ export default function ProductsPage() {
 
       {showForm && (
         <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
-          <h2 className="mb-3 font-semibold">{editingId ? "Edit Product" : "New Product"}</h2>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {Object.entries(PRODUCT_TYPE_TEMPLATES).map(([key, tpl]) => (
+          <h2 className="mb-1 font-semibold">{editingId ? "Edit Product" : "New Product"}</h2>
+          <p className="mb-4 text-sm text-gray-500">{t.products.selectTypeFirst}</p>
+
+          <Label className="mb-2 block">{t.products.productType}</Label>
+          <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {Object.entries(PRODUCT_TYPE_TEMPLATES).map(([key, template]) => (
               <button
                 key={key}
                 type="button"
-                onClick={() => applyTemplate(key)}
-                className="rounded-full border border-gray-300 px-3 py-1 text-xs dark:border-gray-600"
+                onClick={() => applyTemplate(key as ProductTypeKey)}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  productType === key
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
+                    : "border-gray-300 dark:border-gray-600"
+                }`}
               >
-                {tpl.label}
+                <p className="font-medium text-sm">{template.label}</p>
+                <p className="mt-1 text-xs text-gray-500">{template.description}</p>
               </button>
             ))}
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>{t.products.productName}</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Layer Feed 50kg" />
             </div>
             <div>
-              <Label>{t.products.image} (Cloudinary URL)</Label>
-              <Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
+              <Label>{t.products.image} (optional URL)</Label>
+              <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
             </div>
+
+            {showPackageSize && (
+              <div>
+                <Label>
+                  {productType === "feed_bag" ? t.products.bagSizeKg : t.products.bottleSizeMl}
+                </Label>
+                <Input
+                  type="number"
+                  min={0.001}
+                  step="any"
+                  value={packageSize}
+                  onChange={(e) => setPackageSize(parseFloat(e.target.value) || 1)}
+                />
+                {productType === "feed_bag" && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    When you buy in Purchases, qty = number of {packageSize} kg bags
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
-              <Label>{t.products.weightUnit}</Label>
-              <select
-                className="flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-600 dark:bg-gray-900"
-                value={form.weightUnit}
-                onChange={(e) => setForm({ ...form, weightUnit: e.target.value })}
-              >
-                {["BAG", "PIECE", "GRAM", "KG", "LITER", "ML", "GENERIC"].map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </select>
+              <Label>{t.products.referencePrice}</Label>
+              <Input
+                type="number"
+                min={0}
+                value={formatOptionalAmount(sellPrice)}
+                onChange={(e) => setSellPrice(parseOptionalAmountInput(e.target.value))}
+              />
+              <p className="mt-1 text-xs text-gray-500">{t.products.referencePriceHelp}</p>
             </div>
-            <div>
-              <Label>{t.products.basePackageSize}</Label>
-              <Input type="number" value={form.basePackageSize} onChange={(e) => setForm({ ...form, basePackageSize: parseInt(e.target.value) || 1 })} />
-            </div>
-            <div>
-              <Label>{t.products.sellPrice}</Label>
-              <Input type="number" value={form.sellPrice} onChange={(e) => setForm({ ...form, sellPrice: parseFloat(e.target.value) || 0 })} />
-            </div>
-            <div>
-              <Label>{t.products.allowedSellUnits}</Label>
-              <div className="mt-1 flex flex-wrap gap-2">
+
+            <div className="md:col-span-2">
+              <Label>{t.products.quickSellButtons}</Label>
+              <p className="mb-2 text-xs text-gray-500">{t.products.quickSellHelp}</p>
+              <div className="flex flex-wrap gap-2">
                 {presets.map((p) => (
                   <button
                     key={p.value}
                     type="button"
                     onClick={() => toggleSellUnit(p.value)}
                     className={`rounded-full border px-3 py-1 text-xs ${
-                      form.allowedSellUnits.includes(p.value)
+                      allowedSellUnits.includes(p.value)
                         ? "bg-emerald-600 text-white border-emerald-600"
                         : "border-gray-300 dark:border-gray-600"
                     }`}
@@ -204,40 +264,53 @@ export default function ProductsPage() {
               </div>
             </div>
           </div>
+
           <div className="mt-4 flex gap-2">
-            <Button onClick={handleSave} disabled={!form.name || loading}>{t.common.save}</Button>
+            <Button onClick={handleSave} disabled={!name || loading}>{t.common.save}</Button>
             <Button variant="outline" onClick={resetForm}>{t.common.cancel}</Button>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {products.map((p) => (
-          <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
-            <div className="h-32 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-              {p.imageUrl ? <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" /> : <Package size={48} className="text-gray-400" />}
-            </div>
-            <div className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h3 className="font-semibold">{p.name}</h3>
-                  <p className="text-xs text-gray-500">{p.productId} · {p.weightUnit}</p>
+        {products.map((p) => {
+          const type = detectProductType(p.weightUnit);
+          const typeLabel = PRODUCT_TYPE_TEMPLATES[type]?.label ?? p.weightUnit;
+          const sizeLabel =
+            p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG"
+              ? `${gramsToDisplayKg(p.basePackageSize)} kg bag`
+              : p.weightUnit === "ML" || p.weightUnit === "LITER"
+                ? `${p.basePackageSize} ml bottle`
+                : "per piece";
+
+          return (
+            <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
+              <div className="h-32 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                {p.imageUrl ? <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" /> : <Package size={48} className="text-gray-400" />}
+              </div>
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold">{p.name}</h3>
+                    <p className="text-xs text-gray-500">{p.productId}</p>
+                    <p className="text-xs text-emerald-700">{typeLabel} · {sizeLabel}</p>
+                  </div>
+                  <span className="text-sm font-medium text-emerald-600">{formatCurrency(p.sellPrice)}</span>
                 </div>
-                <span className="text-sm font-medium text-emerald-600">{formatCurrency(p.sellPrice)}</span>
-              </div>
-              <div className="mt-3 space-y-1 text-sm text-gray-500">
-                <p>{t.products.stock}: <strong className="text-gray-900 dark:text-white">{p.inventory.formattedTotal}</strong></p>
-                {(p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG") && (
-                  <p>{t.products.closedBags}: <strong>{p.inventory.closedBags}</strong></p>
-                )}
-              </div>
-              <div className="mt-3 flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => openEdit(p)}><Pencil size={14} /> {t.common.edit}</Button>
-                <Button size="sm" variant="outline" onClick={() => handleDelete(p)}><Trash2 size={14} className="text-red-500" /> {t.common.delete}</Button>
+                <div className="mt-3 space-y-1 text-sm text-gray-500">
+                  <p>{t.products.stock}: <strong className="text-gray-900 dark:text-white">{p.inventory.formattedTotal}</strong></p>
+                  {(p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG") && (
+                    <p>{t.products.closedBags}: <strong>{p.inventory.closedBags}</strong></p>
+                  )}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => openEdit(p)}><Pencil size={14} /> {t.common.edit}</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleDelete(p)}><Trash2 size={14} className="text-red-500" /> {t.common.delete}</Button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {products.length === 0 && <p className="col-span-full text-center text-gray-500 py-12">{t.common.noData}</p>}
       </div>
 
