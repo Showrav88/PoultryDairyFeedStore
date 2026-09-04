@@ -114,6 +114,13 @@ export const messages = {
       sellFromFarmers: "Select farmer then sell feed on credit or cash",
       cannotDeleteWithDue: "Cannot delete — clear all due balance first",
       deleteFarmer: "Delete Farmer",
+      paymentHistory: "Payment History",
+      noPaymentsYet: "No payments recorded yet",
+      paymentAmount: "Amount to collect now",
+      collectHelp: "Payment is applied to opening due first, then oldest unpaid sales.",
+      collectSaleHelp: "Collect payment for this sale. Extra amount reduces other dues.",
+      overpaymentHint: "Extra amount will reduce previous due balance",
+      farmerDueBalance: "Previous due balance",
     },
     purchases: {
       title: "Purchases",
@@ -160,6 +167,7 @@ export const messages = {
       sellPriceNow: "Sell price (enter now)",
       noAvgCostYet: "No buy cost yet — add a Purchase first to see profit",
       notAutoFilled: "not auto-filled",
+      paidExceedsTotal: "Paid amount cannot exceed sale total for general customers",
     },
     wallet: {
       title: "Wallet",
@@ -312,6 +320,13 @@ export const messages = {
       sellFromFarmers: "কৃষক বেছে নিন — নগদ বা বাকিতে ফিড বিক্রি",
       cannotDeleteWithDue: "মুছতে পারবেন না — আগে সব বাকি পরিশোধ করুন",
       deleteFarmer: "কৃষক মুছুন",
+      paymentHistory: "পেমেন্ট ইতিহাস",
+      noPaymentsYet: "এখনো কোনো পেমেন্ট নেই",
+      paymentAmount: "এখন সংগ্রহের পরিমাণ",
+      collectHelp: "পেমেন্ট আগে পুরানো বাকিতে, তারপর পুরনো বিক্রয়ের বাকিতে যাবে।",
+      collectSaleHelp: "এই বিক্রয়ের জন্য পেমেন্ট। বেশি দিলে অন্য বাকিতে কাটা হবে।",
+      overpaymentHint: "বেশি টাকা দিলে আগের বাকি কমবে",
+      farmerDueBalance: "আগের বাকি",
     },
     purchases: {
       title: "ক্রয়",
@@ -358,6 +373,7 @@ export const messages = {
       sellPriceNow: "বিক্রয় মূল্য (এখন লিখুন)",
       noAvgCostYet: "ক্রয় মূল্য নেই — লাভ দেখতে প্রথমে ক্রয় যোগ করুন",
       notAutoFilled: "স্বয়ংক্রিয় নয়",
+      paidExceedsTotal: "সাধারণ গ্রাহকের জন্য পরিশোধিত টাকা বিক্রয় মোটের বেশি হতে পারবে না",
     },
     wallet: {
       title: "ওয়ালেট",

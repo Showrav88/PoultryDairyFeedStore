@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
 import { deductStock } from "@/lib/inventory/khucra";
 import { computeLineProfit } from "@/lib/inventory/avg-cost";
+import { collectFarmerPayment } from "@/lib/farmers/payments";
 
 const saleSchema = z.object({
   farmerId: z.string().optional(),
@@ -106,8 +107,15 @@ export async function POST(request: Request) {
       const totalAmount = lineItems.reduce((s, i) => s + i.lineTotal, 0);
       const totalCost = lineItems.reduce((s, i) => s + i.costTotal, 0);
       const totalProfit = lineItems.reduce((s, i) => s + i.profit, 0);
-      const dueAmount = Math.max(0, totalAmount - data.paidAmount);
-      const status = calcPaymentStatus(totalAmount, data.paidAmount);
+
+      if (!data.farmerId && data.paidAmount > totalAmount) {
+        throw new Error("Paid amount cannot exceed sale total for general customers");
+      }
+
+      const salePaid = Math.min(data.paidAmount, totalAmount);
+      const dueAmount = Math.max(0, totalAmount - salePaid);
+      const status = calcPaymentStatus(totalAmount, salePaid);
+      const overpayment = data.farmerId ? Math.max(0, data.paidAmount - totalAmount) : 0;
 
       const sale = await tx.sale.create({
         data: {
@@ -118,7 +126,7 @@ export async function POST(request: Request) {
           totalAmount,
           totalCost,
           totalProfit,
-          paidAmount: data.paidAmount,
+          paidAmount: salePaid,
           dueAmount,
           status,
           notes: data.notes,
@@ -162,6 +170,19 @@ export async function POST(request: Request) {
             note: `Customer due - Sale #${sale.id.slice(-6)}${farmerName ? ` (${farmerName})` : data.customerName ? ` (${data.customerName})` : ""}`,
             referenceId: sale.id,
           },
+        });
+      }
+
+      if (overpayment > 0 && data.farmerId && farmerName) {
+        await collectFarmerPayment(tx, {
+          shopId: session.shopId,
+          farmerId: data.farmerId,
+          farmerName,
+          amount: overpayment,
+          note: `Overpayment from Sale #${sale.id.slice(-6)}`,
+          saleId: sale.id,
+          excludeSaleId: sale.id,
+          skipWallet: true,
         });
       }
 
