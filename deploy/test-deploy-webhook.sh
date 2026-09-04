@@ -38,4 +38,5 @@ elif [[ "$code" == "202" ]]; then
   echo ""
   echo "202 = deploy started in background. Watch:"
   echo "  sudo tail -f /var/log/newproject-deploy.log"
+  echo "If stuck on lock: sudo bash ${APP_DIR}/deploy/unlock-deploy.sh"
 fi
