@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ShoppingCart, Search, X, Plus, Minus, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label, NumberInput } from "@/components/ui/input";
+import { Input, Label, NumberInput, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -603,15 +603,14 @@ function SellCounterContent() {
                 </div>
                 <div>
                   <Label>Unit</Label>
-                  <select
-                    className="flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-600 dark:bg-gray-900"
+                  <Select
                     value={customUnit}
                     onChange={(e) => setCustomUnit(e.target.value as CustomSellUnit)}
                   >
                     {getCustomUnitOptions(selectedProduct.weightUnit).map((u) => (
                       <option key={u.value} value={u.value}>{u.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <p className="col-span-2 text-xs text-emerald-700">
                   Will deduct: {formatSellUnitLabel(effectiveSellUnit(), selectedProduct.weightUnit, selectedProduct.basePackageSize)} per item

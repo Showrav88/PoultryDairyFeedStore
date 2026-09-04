@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Plus, Minus, Package, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label, NumberInput } from "@/components/ui/input";
+import { Input, Label, NumberInput, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { ANIMAL_TYPE_LABELS } from "@/lib/farms/wallet";
@@ -468,15 +468,15 @@ export default function FarmDetailPage() {
                 {sellMode === "custom" && (
                   <div className="flex gap-2">
                     <NumberInput value={customAmount} onChange={setCustomAmount} />
-                    <select
-                      className="rounded-lg border border-[var(--border)] px-2 text-sm"
+                    <Select
+                      className="h-10"
                       value={customUnit}
                       onChange={(e) => setCustomUnit(e.target.value as CustomSellUnit)}
                     >
                       {getCustomUnitOptions(selectedProduct.weightUnit).map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -605,8 +605,8 @@ export default function FarmDetailPage() {
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
             <div>
               <Label>{t.farms.expenseType}</Label>
-              <select
-                className="mt-1 w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+              <Select
+                className="mt-1"
                 value={expType}
                 onChange={(e) => setExpType(e.target.value)}
               >
@@ -614,7 +614,7 @@ export default function FarmDetailPage() {
                 <option value="BILL">{t.farms.bill}</option>
                 <option value="UTILITY">{t.farms.utility}</option>
                 <option value="OTHER">{t.wallet.other}</option>
-              </select>
+              </Select>
             </div>
             <div>
               <Label>{t.common.amount}</Label>

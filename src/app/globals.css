@@ -76,6 +76,23 @@ select {
   touch-action: manipulation;
 }
 
+select {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+}
+
+/* Native option popups often use a light surface — keep readable text */
+select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+.dark select option,
+.night select option {
+  background-color: #1e293b;
+  color: #f1f5f9;
+}
+
 @media (max-width: 767px) {
   input,
   select,

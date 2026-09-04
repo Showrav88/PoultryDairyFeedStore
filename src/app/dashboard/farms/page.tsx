@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, ChevronRight, Tractor } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { ANIMAL_TYPE_LABELS } from "@/lib/farms/wallet";
@@ -139,8 +139,8 @@ export default function FarmsPage() {
           </div>
           <div>
             <Label>{t.farms.animalType}</Label>
-            <select
-              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+            <Select
+              className="mt-1"
               value={form.animalType}
               onChange={(e) =>
                 setForm({ ...form, animalType: e.target.value as (typeof ANIMAL_TYPES)[number] })
@@ -151,7 +151,7 @@ export default function FarmsPage() {
                   {animalLabel(type)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <Label>{t.farms.location}</Label>
