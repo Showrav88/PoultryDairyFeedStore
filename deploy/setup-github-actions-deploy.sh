@@ -26,6 +26,8 @@ if [[ ! -x "$DEPLOY_CMD" ]] || ! grep -q 'deploy/deploy-newproject.sh' "$DEPLOY_
 fi
 
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: ${DEPLOY_CMD}" > "$SUDOERS_FILE"
+echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart newproject-api.service" >> "$SUDOERS_FILE"
+echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart newproject-api.service" >> "$SUDOERS_FILE"
 chmod 440 "$SUDOERS_FILE"
 visudo -cf "$SUDOERS_FILE"
 

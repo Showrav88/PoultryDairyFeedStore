@@ -67,14 +67,19 @@ npx prisma migrate deploy
 
 write_status "restarting" "$DEPLOYING_SHA" "Restarting application"
 
-# Stop the current Node process; systemd Restart=always brings the app back with new build.
-if command -v fuser >/dev/null 2>&1; then
-  fuser -k "${PORT}/tcp" 2>/dev/null || true
+# Graceful restart via systemd (preferred). Do NOT use fuser -k — it causes site downtime.
+if sudo -n systemctl restart newproject-api.service 2>/dev/null; then
+  echo "Restarted via sudo systemctl"
+elif systemctl restart newproject-api.service 2>/dev/null; then
+  echo "Restarted via systemctl"
 else
-  pkill -TERM -f "next start --hostname 127.0.0.1 --port ${PORT}" 2>/dev/null || true
+  echo "WARNING: Could not restart service. Run on VPS:"
+  echo "  sudo systemctl restart newproject-api.service"
+  write_status "failed" "$DEPLOYING_SHA" "Could not restart service — run sudo systemctl restart newproject-api.service"
+  exit 1
 fi
 
-sleep 8
+sleep 5
 
 for attempt in {1..30}; do
   if curl --fail --silent "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
