@@ -122,6 +122,10 @@ export const messages = {
       collectSaleHelp: "Collect payment for this sale. Extra amount reduces other dues.",
       overpaymentHint: "Extra amount will reduce previous due balance",
       farmerDueBalance: "Previous due balance",
+      maxCollect: "Maximum you can collect",
+      appliedToDue: "Applied to due",
+      noDueToCollect: "No due balance — nothing to collect",
+      paidOnSale: "Paid on this sale",
     },
     farms: {
       title: "Own Farms",
@@ -379,6 +383,10 @@ export const messages = {
       collectSaleHelp: "এই বিক্রয়ের জন্য পেমেন্ট। বেশি দিলে অন্য বাকিতে কাটা হবে।",
       overpaymentHint: "বেশি টাকা দিলে আগের বাকি কমবে",
       farmerDueBalance: "আগের বাকি",
+      maxCollect: "সর্বোচ্চ সংগ্রহ",
+      appliedToDue: "বাকিতে কাটা",
+      noDueToCollect: "কোনো বাকি নেই — সংগ্রহ করার কিছু নেই",
+      paidOnSale: "এই বিক্রয়ে পরিশোধ",
     },
     farms: {
       title: "নিজের খামার",

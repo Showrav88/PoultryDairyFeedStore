@@ -74,7 +74,11 @@ export default function FarmerProfilePage() {
   };
 
   const saveManualPayment = () => {
-    if (collectAmount <= 0) return;
+    if (collectAmount <= 0 || loading) return;
+    if (farmer && collectAmount > farmer.totalDue) {
+      alert(`${t.farmers.maxCollect}: ${formatCurrency(farmer.totalDue)}`);
+      return;
+    }
     confirm(async () => {
       setLoading(true);
       try {
@@ -98,7 +102,12 @@ export default function FarmerProfilePage() {
   };
 
   const saveSalePayment = () => {
-    if (!paySaleId || payAmount <= 0) return;
+    if (!paySaleId || payAmount <= 0 || loading) return;
+    const sale = sales.find((s) => s.id === paySaleId);
+    if (farmer && payAmount > farmer.totalDue) {
+      alert(`${t.farmers.maxCollect}: ${formatCurrency(farmer.totalDue)}`);
+      return;
+    }
     confirm(async () => {
       setLoading(true);
       try {
@@ -186,6 +195,10 @@ export default function FarmerProfilePage() {
             </div>
             {p.allocations.length > 0 && (
               <ul className="mt-2 space-y-1 text-xs text-gray-500">
+                <li className="font-medium text-emerald-600">
+                  {t.farmers.appliedToDue}:{" "}
+                  {formatCurrency(p.allocations.reduce((s, a) => s + a.amount, 0))}
+                </li>
                 {p.allocations.map((a, i) => (
                   <li key={i}>
                     {a.label}: {formatCurrency(a.amount)}
@@ -200,14 +213,16 @@ export default function FarmerProfilePage() {
 
       <h2 className="mb-3 text-lg font-semibold">{t.farmers.salesHistory}</h2>
       <div className="space-y-3">
-        {sales.map((sale) => (
+        {sales.map((sale) => {
+          const paidOnSale = Math.min(Number(sale.paidAmount), Number(sale.totalAmount));
+          return (
           <div key={sale.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="font-medium">{formatCurrency(sale.totalAmount)} · {sale.status}</p>
                 <p className="text-xs text-gray-500">{formatDateTime(sale.createdAt, locale)}</p>
                 <p className="text-sm mt-1">
-                  {t.common.paid}: {formatCurrency(sale.paidAmount)} · {t.common.due}: {formatCurrency(sale.dueAmount)}
+                  {t.farmers.paidOnSale}: {formatCurrency(paidOnSale)} · {t.common.due}: {formatCurrency(sale.dueAmount)}
                 </p>
               </div>
               {Number(sale.dueAmount) > 0 && (
@@ -222,7 +237,8 @@ export default function FarmerProfilePage() {
               ))}
             </ul>
           </div>
-        ))}
+          );
+        })}
         {sales.length === 0 && <p className="text-center text-gray-500 py-6">{t.common.noData}</p>}
       </div>
 
@@ -231,8 +247,17 @@ export default function FarmerProfilePage() {
           <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
             <h3 className="font-semibold mb-1">{t.farmers.collectPayment}</h3>
             <p className="mb-3 text-sm text-gray-500">{t.farmers.collectHelp}</p>
+            {farmer.totalDue > 0 && (
+              <p className="mb-2 text-sm text-orange-600">
+                {t.farmers.maxCollect}: {formatCurrency(farmer.totalDue)}
+              </p>
+            )}
             <Label>{t.farmers.paymentAmount}</Label>
-            <NumberInput value={collectAmount} onChange={setCollectAmount} className="mb-3" />
+            <NumberInput
+              value={collectAmount}
+              onChange={(v) => setCollectAmount(Math.min(v, farmer.totalDue))}
+              className="mb-3"
+            />
             <Label>{t.common.notes} ({t.common.optional})</Label>
             <Input value={collectNote} onChange={(e) => setCollectNote(e.target.value)} className="mb-4" />
             <div className="flex gap-2">
@@ -249,7 +274,14 @@ export default function FarmerProfilePage() {
             <h3 className="font-semibold mb-1">{t.farmers.collectPayment}</h3>
             <p className="mb-3 text-sm text-gray-500">{t.farmers.collectSaleHelp}</p>
             <Label>{t.farmers.paymentAmount}</Label>
-            <NumberInput value={payAmount} onChange={setPayAmount} className="mb-4" />
+            <NumberInput
+              value={payAmount}
+              onChange={(v) => {
+                const max = farmer?.totalDue ?? v;
+                setPayAmount(Math.min(v, max));
+              }}
+              className="mb-4"
+            />
             <div className="flex gap-2">
               <Button onClick={saveSalePayment} disabled={payAmount <= 0}>{t.common.save}</Button>
               <Button variant="outline" onClick={() => setPaySaleId(null)}>{t.common.cancel}</Button>

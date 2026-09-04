@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { getPaymentAlert, type PaymentAlert } from "@/lib/farmers/alerts";
+
+type TxClient = Prisma.TransactionClient;
 
 export interface FarmerBalanceSummary {
   totalDue: number;
@@ -77,4 +80,23 @@ export async function getFarmerBalance(
       daysOverdue: 0,
     }
   );
+}
+
+export async function getFarmerTotalDueInTx(
+  tx: TxClient,
+  shopId: string,
+  farmerId: string
+): Promise<number> {
+  const farmer = await tx.farmer.findFirst({
+    where: { id: farmerId, shopId },
+    select: { openingDue: true },
+  });
+  if (!farmer) return 0;
+
+  const unpaid = await tx.sale.aggregate({
+    where: { shopId, farmerId, dueAmount: { gt: 0 } },
+    _sum: { dueAmount: true },
+  });
+
+  return Number(farmer.openingDue) + Number(unpaid._sum.dueAmount ?? 0);
 }

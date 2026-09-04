@@ -80,12 +80,13 @@ export async function POST(
     });
 
     try {
+      const allocated = result.allocations.reduce((s, a) => s + a.amount, 0);
       await logAudit(
         session.shopId,
         "FARMER",
         farmerId,
         "UPDATE",
-        `Payment collected: ৳${data.amount} (${result.allocations.length} allocation(s))`,
+        `Payment collected: ৳${data.amount} applied to due ৳${allocated} (${result.allocations.length} allocation(s))`,
         null,
         result
       );
