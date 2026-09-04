@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { COOKIE_NAME, verifySession } from "@/lib/auth";
 
 const publicPaths = ["/", "/login", "/register"];
-const publicApiPaths = ["/api/auth/register", "/api/auth/login", "/api/health"];
+const publicApiPaths = ["/api/auth/register", "/api/auth/login", "/api/health", "/api/deploy"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

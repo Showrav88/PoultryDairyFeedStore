@@ -201,57 +201,59 @@ Open `http://31.97.50.25:8081`.
 
 ## Automatic deployment after every push to main
 
-The included GitHub Actions workflow calls the deployment command after each
-push to `main`.
+GitHub Actions triggers deploy over **HTTP port 8081** (webhook). This works even
+when port 22 SSH is blocked for GitHub runners (common on Hostinger VPS).
 
-### 1. Create an SSH key for GitHub Actions on the VPS
+### 1. One-time VPS setup
 
-Run the helper script (prints all values to paste into GitHub):
+```bash
+# Allow newproject to run deploy without password
+echo 'newproject ALL=(root) NOPASSWD: /usr/local/sbin/deploy-newproject' \
+  | sudo tee /etc/sudoers.d/newproject-deploy
+sudo chmod 440 /etc/sudoers.d/newproject-deploy
+sudo visudo -cf /etc/sudoers.d/newproject-deploy
+
+# Generate webhook secret and add to .env
+DEPLOY_SECRET="$(openssl rand -hex 32)"
+grep -q '^DEPLOY_WEBHOOK_SECRET=' /var/www/NEWPROJECT/.env \
+  && sudo sed -i "s/^DEPLOY_WEBHOOK_SECRET=.*/DEPLOY_WEBHOOK_SECRET=\"${DEPLOY_SECRET}\"/" /var/www/NEWPROJECT/.env \
+  || echo "DEPLOY_WEBHOOK_SECRET=\"${DEPLOY_SECRET}\"" | sudo tee -a /var/www/NEWPROJECT/.env
+
+# Update nginx timeout for long deploys (after git pull)
+sudo install -m 644 /var/www/NEWPROJECT/deploy/nginx-newproject.conf /etc/nginx/sites-available/newproject
+sudo nginx -t && sudo systemctl reload nginx
+
+echo "DEPLOY_WEBHOOK_SECRET=${DEPLOY_SECRET}"
+echo "Save this secret for GitHub Actions"
+```
+
+Or run the helper:
 
 ```bash
 sudo bash /var/www/NEWPROJECT/deploy/setup-github-actions-deploy.sh
 ```
 
-Or manually:
+Deploy the webhook endpoint once manually:
 
 ```bash
-sudo -u newproject install -m 700 -d /home/newproject/.ssh
-sudo -u newproject ssh-keygen -t ed25519 -N '' \
-  -C github-actions-newproject \
-  -f /home/newproject/.ssh/github_actions
-
-sudo -u newproject sh -c \
-  'cat ~/.ssh/github_actions.pub >> ~/.ssh/authorized_keys'
-sudo chmod 600 /home/newproject/.ssh/authorized_keys
-
-echo 'newproject ALL=(root) NOPASSWD: /usr/local/sbin/deploy-newproject' \
-  | sudo tee /etc/sudoers.d/newproject-deploy
-sudo chmod 440 /etc/sudoers.d/newproject-deploy
-sudo visudo -cf /etc/sudoers.d/newproject-deploy
+sudo /usr/local/sbin/deploy-newproject
 ```
 
 ### 2. Add GitHub repository secrets
 
-In GitHub, open **Settings → Secrets and variables → Actions** and add:
+In GitHub → **Settings → Secrets and variables → Actions**:
 
-- `VPS_HOST`: `31.97.50.25`
-- `VPS_USER`: `newproject`
-- `VPS_SSH_KEY`: private key from the script output. Copy **every line** from
-  `-----BEGIN OPENSSH PRIVATE KEY-----` through `-----END OPENSSH PRIVATE KEY-----`.
-  Do **not** add quotes, spaces at the start of lines, or extra blank lines.
+| Secret | Value |
+|--------|--------|
+| `DEPLOY_WEBHOOK_SECRET` | Same as `DEPLOY_WEBHOOK_SECRET` in VPS `.env` |
+| `VPS_DEPLOY_URL` | `http://31.97.50.25:8081/api/deploy` |
 
-- `VPS_KNOWN_HOSTS`: output of `ssh-keyscan -H 31.97.50.25`. Lines often end
-  with `=` — that is normal base64, not an error. Do not add spaces before or
-  after the line.
+Remove old SSH secrets (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`) — not needed.
 
-Every push to `main` will then:
+Every push to `main` will then POST to `/api/deploy`, which runs the same deploy script.
 
-1. serialize deployments with a lock;
-2. fetch and fast-forward the VPS checkout;
-3. run `npm ci`, tests and the production build;
-4. apply pending Prisma migrations;
-5. restart only `newproject-api.service`;
-6. verify `/api/health`.
+**Note:** `Connection timed out` on port 22 means the firewall blocks GitHub SSH.
+The webhook method avoids SSH entirely.
 
 ## Operations
 
