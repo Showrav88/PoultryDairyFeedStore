@@ -12,7 +12,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Validate deployment secrets
         env:
@@ -34,7 +34,9 @@ jobs:
           VPS_DEPLOY_URL: ${{ secrets.VPS_DEPLOY_URL }}
         run: |
           set -euo pipefail
-          HEALTH_URL="${VPS_DEPLOY_URL%/api/deploy}/api/health"
+          BASE_URL="${VPS_DEPLOY_URL%/api/deploy}"
+          HEALTH_URL="${BASE_URL}/api/health"
+          STATUS_URL="${BASE_URL}/api/deploy/status"
 
           echo "Deploying commit ${GITHUB_SHA} via webhook"
           code=""
@@ -65,24 +67,38 @@ jobs:
             exit 1
           fi
 
-          echo "Waiting for app health at $HEALTH_URL ..."
-          for attempt in $(seq 1 60); do
+          short_github_sha="${GITHUB_SHA:0:7}"
+          echo "Waiting for deploy to finish (target sha ${short_github_sha}) ..."
+
+          for attempt in $(seq 1 120); do
             health_json=$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null || true)
+            status_json=$(curl -fsS --max-time 10 "$STATUS_URL" 2>/dev/null || true)
+
             if [[ -n "$health_json" ]]; then
               echo "$health_json"
               deployed_sha=$(echo "$health_json" | sed -n 's/.*"deploySha":"\([^"]*\)".*/\1/p')
-              short_github_sha="${GITHUB_SHA:0:7}"
-              if [[ -n "$deployed_sha" && "$deployed_sha" != "$short_github_sha" ]]; then
-                echo "Health OK but deploySha=$deployed_sha (expected $short_github_sha) — still deploying..."
-              else
-                echo "Health check passed (attempt $attempt)"
-                echo "Deploy finished successfully."
+              deploy_state=$(echo "$health_json" | sed -n 's/.*"deployState":"\([^"]*\)".*/\1/p')
+
+              if [[ "$deploy_state" == "failed" ]]; then
+                echo "::error::VPS deploy failed"
+                echo "$status_json"
+                exit 1
+              fi
+
+              if [[ -n "$deployed_sha" && "$deployed_sha" == "$short_github_sha" ]]; then
+                echo "Deploy finished successfully (sha ${deployed_sha}, attempt ${attempt})."
                 exit 0
               fi
+
+              echo "Still deploying: deploySha=${deployed_sha:-unknown} state=${deploy_state:-unknown} (attempt ${attempt}/120)"
+            else
+              echo "Health not reachable yet (${attempt}/120)..."
             fi
-            echo "Not healthy yet ($attempt/60)..."
+
             sleep 10
           done
 
-          echo "::error::App did not become healthy within 10 minutes"
+          echo "::error::Deploy did not reach commit ${short_github_sha} within 20 minutes"
+          echo "Deploy status:"
+          curl -fsS --max-time 15 "$STATUS_URL" 2>/dev/null || true
           exit 1
