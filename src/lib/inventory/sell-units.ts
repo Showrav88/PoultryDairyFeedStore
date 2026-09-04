@@ -109,9 +109,7 @@ export function formatStockDisplay(amount: number, weightUnit: string, basePacka
 
 export function formatSellUnitLabel(amount: number, weightUnit: string, basePackageSize: number) {
   if (amount === basePackageSize && basePackageSize > 1) {
-    if (weightUnit === "PIECE" || weightUnit === "GENERIC") return `Full Pack (${basePackageSize} pcs)`;
-    if (weightUnit === "ML" || weightUnit === "LITER") return `Full Bottle`;
-    return "1 Bag";
+    return formatFullPackageLabel(basePackageSize, weightUnit);
   }
   if (weightUnit === "PIECE" || weightUnit === "GENERIC") {
     return amount === 1 ? "1 Piece" : `${amount} Pieces`;
@@ -162,4 +160,28 @@ export function parseCustomSellAmount(
     default:
       return Math.round(amount);
   }
+}
+
+export function supportsFullPackageSale(weightUnit: string): boolean {
+  return ["BAG", "GRAM", "KG", "ML", "LITER", "PIECE", "GENERIC"].includes(weightUnit);
+}
+
+export function formatFullPackageLabel(basePackageSize: number, weightUnit: string): string {
+  if (weightUnit === "PIECE" || weightUnit === "GENERIC") {
+    return `Full Pack (${basePackageSize} pcs)`;
+  }
+  if (weightUnit === "ML" || weightUnit === "LITER") {
+    return `Full Bottle (${formatVolume(basePackageSize)})`;
+  }
+  return `Full Bag (${formatWeight(basePackageSize)})`;
+}
+
+/** Khucra presets only — excludes full bag/pack size */
+export function getKhucraSellUnits(allowedSellUnits: number[], basePackageSize: number): number[] {
+  const units = allowedSellUnits.filter((u) => u !== basePackageSize);
+  return [...new Set(units)].sort((a, b) => a - b);
+}
+
+export function isFullPackageUnit(amount: number, basePackageSize: number): boolean {
+  return basePackageSize > 1 && amount === basePackageSize;
 }
