@@ -12,7 +12,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       value={{
         light: "light",
         dark: "dark",
-        night: "dark night",
+        night: "night",
       }}
       enableSystem={false}
     >
