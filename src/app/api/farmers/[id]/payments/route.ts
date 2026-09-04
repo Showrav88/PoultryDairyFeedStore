@@ -79,15 +79,19 @@ export async function POST(
       });
     });
 
-    await logAudit(
-      session.shopId,
-      "FARMER",
-      farmerId,
-      "UPDATE",
-      `Payment collected: ৳${data.amount} (${result.allocations.length} allocation(s))`,
-      null,
-      result
-    );
+    try {
+      await logAudit(
+        session.shopId,
+        "FARMER",
+        farmerId,
+        "UPDATE",
+        `Payment collected: ৳${data.amount} (${result.allocations.length} allocation(s))`,
+        null,
+        result
+      );
+    } catch (auditErr) {
+      console.error("Audit log failed for farmer payment:", auditErr);
+    }
 
     return NextResponse.json({ payment: result });
   } catch (err) {
