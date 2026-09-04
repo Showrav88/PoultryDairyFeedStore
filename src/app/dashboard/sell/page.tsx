@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ShoppingCart, Search, X, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -62,9 +62,18 @@ export default function SellCounterPage() {
   const [searchResults, setSearchResults] = useState<Sale[]>([]);
   const [showSearch, setShowSearch] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/products").then((r) => r.json()).then((d) => setProducts(d.products ?? []));
+  const loadProducts = useCallback(() => {
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((d) => setProducts(d.products ?? []));
   }, []);
+
+  useEffect(() => {
+    loadProducts();
+    const onFocus = () => loadProducts();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loadProducts]);
 
   const cartTotal = cart.reduce((s, i) => s + i.pricePerUnit * i.unitCount, 0);
 
@@ -136,7 +145,14 @@ export default function SellCounterPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 lg:flex-row lg:gap-6">
+    <>
+      <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+        <p className="font-semibold">Stock comes from Purchases</p>
+        <p className="mt-1">If quantity shows 0, go to Purchases and buy bags for that product first. Tap Refresh if you just added stock.</p>
+        <Button className="mt-2 min-h-9" size="sm" variant="outline" onClick={loadProducts}>Refresh Stock</Button>
+      </div>
+
+      <div className="flex h-full flex-col gap-4 lg:flex-row lg:gap-6">
       {/* Product Grid */}
       <div className="flex-1">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -202,7 +218,12 @@ export default function SellCounterPage() {
               </div>
               <h3 className="font-semibold text-sm truncate">{p.name}</h3>
               <p className="truncate text-xs text-gray-500">{p.productId}</p>
-              <p className="text-xs mt-1 text-emerald-600 font-medium">{p.inventory.formattedTotal}</p>
+              <p className="text-xs mt-1 text-emerald-600 font-medium">
+                Stock: {p.inventory.formattedTotal} · {p.inventory.closedBags} bags
+              </p>
+              {p.inventory.totalStock <= 0 && (
+                <p className="text-xs text-red-500">No stock — add purchase first</p>
+              )}
               {p.inventory.formattedOpenBag && (
                 <p className="text-xs text-orange-500">Open: {p.inventory.formattedOpenBag}</p>
               )}
@@ -332,6 +353,7 @@ export default function SellCounterPage() {
           </Button>
         </div>
       </div>
+      </div>
 
       <ConfirmDialog
         open={confirmState.open}
@@ -340,6 +362,6 @@ export default function SellCounterPage() {
         onCancel={close}
         loading={loading}
       />
-    </div>
+    </>
   );
 }

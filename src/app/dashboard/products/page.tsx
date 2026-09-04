@@ -74,6 +74,11 @@ export default function ProductsPage() {
 
   return (
     <div>
+      <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+        <p className="font-semibold">Step 1: Create product catalogue</p>
+        <p className="mt-1">Example: Layer Feed, BAG, package size 50000 (= 50kg bag). Sell price is reference only. Stock starts at 0 until you buy in Purchases.</p>
+      </div>
+
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold sm:text-2xl">{t.products.title}</h1>
         <Button className="min-h-11 shrink-0" onClick={() => setShowForm(!showForm)}>

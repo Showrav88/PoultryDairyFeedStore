@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -34,16 +34,34 @@ export default function PurchasesPage() {
   const [paidAmount, setPaidAmount] = useState(0);
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
+  const [editPaidAmount, setEditPaidAmount] = useState(0);
 
-  useEffect(() => {
+  const loadPurchases = () =>
     fetch("/api/purchases").then((r) => r.json()).then((d) => setPurchases(d.purchases ?? []));
-    fetch("/api/buyers").then((r) => r.json()).then((d) => setBuyers(d.buyers ?? []));
-    fetch("/api/products").then((r) => r.json()).then((d) => setProducts(d.products ?? []));
+
+  const searchBuyers = useCallback((q: string) => {
+    const params = q ? `?q=${encodeURIComponent(q)}` : "";
+    fetch(`/api/buyers${params}`)
+      .then((r) => r.json())
+      .then((d) => setBuyers(d.buyers ?? []));
   }, []);
 
-  const filteredBuyers = buyers.filter(
-    (b) => b.name.toLowerCase().includes(buyerSearch.toLowerCase()) || b.phone.includes(buyerSearch)
-  );
+  useEffect(() => {
+    loadPurchases();
+    searchBuyers("");
+    fetch("/api/products").then((r) => r.json()).then((d) => setProducts(d.products ?? []));
+  }, [searchBuyers]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => searchBuyers(buyerSearch), 300);
+    return () => clearTimeout(timer);
+  }, [buyerSearch, searchBuyers]);
+
+  const selectBuyer = (buyer: Buyer) => {
+    setBuyerId(buyer.id);
+    setBuyerSearch(`${buyer.name} (${buyer.phone})`);
+  };
 
   const addItem = () => {
     if (products.length === 0) return;
@@ -74,7 +92,11 @@ export default function PurchasesPage() {
         setShowForm(false);
         setItems([]);
         setBuyerId("");
-        fetch("/api/purchases").then((r) => r.json()).then((d) => setPurchases(d.purchases ?? []));
+        setBuyerSearch("");
+        setPaidAmount(0);
+        loadPurchases();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Purchase failed");
       } finally {
         setLoading(false);
         close();
@@ -82,8 +104,45 @@ export default function PurchasesPage() {
     }, { message: `Create purchase for ${formatCurrency(totalCost)}?` });
   };
 
+  const handleUpdatePayment = () => {
+    if (!editingPurchase) return;
+    confirm(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/purchases/${editingPurchase.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paidAmount: editPaidAmount }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        setEditingPurchase(null);
+        loadPurchases();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Update failed");
+      } finally {
+        setLoading(false);
+        close();
+      }
+    }, { message: `Update paid amount to ${formatCurrency(editPaidAmount)}?` });
+  };
+
+  const selectedBuyer = buyers.find((b) => b.id === buyerId);
+  const buyerSuggestions = buyerSearch
+    ? buyers.filter(
+        (b) =>
+          b.id !== buyerId &&
+          (b.name.toLowerCase().includes(buyerSearch.toLowerCase()) ||
+            b.phone.includes(buyerSearch.replace(/\D/g, "")))
+      )
+    : buyers;
+
   return (
     <div>
+      <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+        <p className="font-semibold">How to add stock:</p>
+        <p className="mt-1">1. Create product in Products → 2. Add buyer in Buyers → 3. New Purchase here (qty = number of bags) → 4. Stock appears in Sell Counter</p>
+      </div>
+
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold sm:text-2xl">{t.purchases.title}</h1>
         <Button className="min-h-11 shrink-0" onClick={() => setShowForm(!showForm)}>
@@ -93,33 +152,52 @@ export default function PurchasesPage() {
 
       {showForm && (
         <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="relative">
               <Label>{t.purchases.selectBuyer}</Label>
               <Input
                 placeholder={t.buyers.searchByNameOrPhone}
                 value={buyerSearch}
-                onChange={(e) => setBuyerSearch(e.target.value)}
+                onChange={(e) => {
+                  setBuyerSearch(e.target.value);
+                  setBuyerId("");
+                }}
                 className="mb-2"
               />
-              <select
-                className="w-full h-10 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-900"
-                value={buyerId}
-                onChange={(e) => setBuyerId(e.target.value)}
-              >
-                <option value="">Select...</option>
-                {filteredBuyers.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name} ({b.phone})</option>
-                ))}
-              </select>
+              {selectedBuyer && (
+                <p className="mb-2 text-xs text-emerald-600">
+                  Selected: {selectedBuyer.name} ({selectedBuyer.phone})
+                </p>
+              )}
+              {buyerSuggestions.length > 0 && !selectedBuyer && buyerSearch && (
+                <div className="absolute z-20 max-h-48 w-full overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
+                  {buyerSuggestions.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => selectBuyer(b)}
+                      className="flex w-full flex-col items-start px-3 py-3 text-left hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                    >
+                      <span className="font-medium">{b.name}</span>
+                      <span className="text-xs text-gray-500">{b.phone}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {buyerSearch && buyerSuggestions.length === 0 && (
+                <p className="text-xs text-orange-600">No buyer found. Add buyer first in Buyers page.</p>
+              )}
             </div>
             <div>
               <Label>{t.common.paid}</Label>
-              <Input type="number" value={paidAmount} onChange={(e) => setPaidAmount(parseFloat(e.target.value))} />
+              <Input type="number" value={paidAmount} onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)} />
+              <p className="mt-1 text-xs text-gray-500">
+                Total: {formatCurrency(totalCost)} · Due: {formatCurrency(Math.max(0, totalCost - paidAmount))}
+              </p>
             </div>
           </div>
 
-          <div className="space-y-2 mb-4">
+          <div className="mb-4 mt-4 space-y-2">
             {items.map((item, idx) => (
               <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="sm:col-span-2">
@@ -136,11 +214,11 @@ export default function PurchasesPage() {
                 </div>
                 <div>
                   <Label>Qty (bags)</Label>
-                  <Input type="number" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value))} />
+                  <Input type="number" min={1} value={item.quantity} onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)} />
                 </div>
                 <div>
                   <Label>{t.purchases.costPerUnit}</Label>
-                  <Input type="number" value={item.costPricePerUnit} onChange={(e) => updateItem(idx, "costPricePerUnit", parseFloat(e.target.value))} />
+                  <Input type="number" value={item.costPricePerUnit} onChange={(e) => updateItem(idx, "costPricePerUnit", parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="flex min-h-10 items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
                   <span className="text-sm font-medium">{formatCurrency(item.costPriceTotal)}</span>
@@ -153,7 +231,9 @@ export default function PurchasesPage() {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button className="min-h-11" variant="outline" onClick={addItem}><Plus size={16} /> {t.purchases.addItem}</Button>
+            <Button className="min-h-11" variant="outline" onClick={addItem} disabled={products.length === 0}>
+              <Plus size={16} /> {t.purchases.addItem}
+            </Button>
             <span className="font-bold sm:ml-auto">{t.common.total}: {formatCurrency(totalCost)}</span>
             <Button className="min-h-11" onClick={handleCreate} disabled={!buyerId || items.length === 0}>{t.common.save}</Button>
           </div>
@@ -163,7 +243,7 @@ export default function PurchasesPage() {
       <div className="space-y-3">
         {purchases.map((p) => (
           <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-3">
               <div>
                 <p className="font-semibold">{p.buyer.name}</p>
                 <p className="text-xs text-gray-500">{formatDateTime(p.createdAt, locale)}</p>
@@ -178,12 +258,53 @@ export default function PurchasesPage() {
               </div>
             </div>
             <div className="mt-2 text-sm text-gray-500">
-              {p.items.map((i) => `${i.product.name} ×${i.quantity}`).join(", ")}
+              {p.items.map((i) => `${i.product.name} ×${i.quantity} bags`).join(", ")}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <span>{t.common.paid}: <strong>{formatCurrency(p.paidAmount)}</strong></span>
+              <span>{t.common.due}: <strong className="text-orange-600">{formatCurrency(p.dueAmount)}</strong></span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-9"
+                onClick={() => {
+                  setEditingPurchase(p);
+                  setEditPaidAmount(Number(p.paidAmount));
+                }}
+              >
+                <Pencil size={14} /> Update Payment
+              </Button>
             </div>
           </div>
         ))}
         {purchases.length === 0 && <p className="text-center text-gray-500 py-8">{t.common.noData}</p>}
       </div>
+
+      {editingPurchase && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center p-3 sm:items-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setEditingPurchase(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-[var(--card)] p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">Update Payment</h3>
+            <p className="mt-1 text-sm text-gray-500">{editingPurchase.buyer.name}</p>
+            <p className="text-sm">Total: {formatCurrency(editingPurchase.totalCost)}</p>
+            <div className="mt-4">
+              <Label>{t.common.paid}</Label>
+              <Input
+                type="number"
+                value={editPaidAmount}
+                onChange={(e) => setEditPaidAmount(parseFloat(e.target.value) || 0)}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Due after update: {formatCurrency(Math.max(0, Number(editingPurchase.totalCost) - editPaidAmount))}
+              </p>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Button variant="outline" className="min-h-11" onClick={() => setEditingPurchase(null)}>{t.common.cancel}</Button>
+              <Button className="min-h-11" onClick={handleUpdatePayment}>{t.common.save}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog open={confirmState.open} message={confirmState.message} onConfirm={confirmState.onConfirm} onCancel={close} loading={loading} />
     </div>
