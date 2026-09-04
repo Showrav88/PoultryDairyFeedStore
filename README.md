@@ -1,6 +1,6 @@
 # Poultry & Dairy Feed Store SaaS
 
-Multi-tenant SaaS for poultry and dairy feed shops in Bangladesh. Supports full-bag inventory, khugra (fractional) selling, purchases, wallet, analytics, and Bangla/English UI.
+Multi-tenant SaaS for poultry and dairy feed shops in Bangladesh. Supports full-bag inventory, khucra (fractional) selling, purchases, wallet, analytics, and Bangla/English UI.
 
 ## Tech Stack
 
@@ -22,15 +22,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-## Khugra (Fractional Bag) Inventory Solution
+## Khucra (Fractional Bag) Inventory Solution
 
 ### The Problem
 
-Shops buy feed in **big bags** (e.g. 50 kg) but also sell in **small quantities** (khugra): 100g, 250g, 500g, 1 kg. The system must track:
+Shops buy feed in **big bags** (e.g. 50 kg) but also sell in **small quantities** (khucra): 100g, 250g, 500g, 1 kg. The system must track:
 
 1. How many **sealed bags** remain in stock
 2. How much is left in the **currently open bag**
-3. Automatically **open a new bag** when the open bag runs out during a khugra sale
+3. Automatically **open a new bag** when the open bag runs out during a khucra sale
 
 ### The Solution: Three-Field Inventory Model
 
@@ -45,7 +45,7 @@ Every product tracks stock in the **smallest unit** (grams for weight, ml for vo
 ### Sale Flow
 
 ```
-Sell 250g khugra:
+Sell 250g khucra:
   1. If openBag >= 250g → deduct from open bag
   2. Else → open 1 sealed bag, add 50,000g to open bag, then deduct 250g
   3. Update total stock -= 250g
@@ -53,7 +53,7 @@ Sell 250g khugra:
 
 ### Engine Location
 
-`src/lib/inventory/khugra.ts` — pure functions, fully unit-tested (7 tests).
+`src/lib/inventory/khucra.ts` — pure functions, fully unit-tested (7 tests).
 
 ## Features Built (Phase 1)
 
@@ -61,11 +61,11 @@ Sell 250g khugra:
 |--------|--------|
 | Shop registration & login | ✅ |
 | Multi-tenant data isolation | ✅ |
-| Product catalogue (name, image, weight units, khugra presets) | ✅ |
+| Product catalogue (name, image, weight units, khucra presets) | ✅ |
 | Auto product ID (NAME-000001, up to 60M) | ✅ |
 | Buyer management with search | ✅ |
 | Purchases (multi-product, cost per item, DUE/PAID/PARTIAL) | ✅ |
-| Sell counter (product cards, khugra units, cart) | ✅ |
+| Sell counter (product cards, khucra units, cart) | ✅ |
 | Wallet (deposit, withdraw, expense categories) | ✅ |
 | Analytics (day/month/year, top/low products) | ✅ |
 | History / audit log with timestamps | ✅ |
@@ -103,7 +103,7 @@ src/
 │   └── register/
 ├── components/       # UI components
 ├── lib/
-│   ├── inventory/    # Khugra engine
+│   ├── inventory/    # Khucra engine
 │   ├── i18n/         # Bangla/English
 │   ├── auth.ts
 │   └── db.ts

@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateProductId } from "@/lib/utils";
 import { logAudit } from "@/lib/audit";
-import { getInventorySummary } from "@/lib/inventory/khugra";
+import { getInventorySummary } from "@/lib/inventory/khucra";
 
 export async function GET() {
   const session = await getSession();

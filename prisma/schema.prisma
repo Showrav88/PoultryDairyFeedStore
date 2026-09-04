@@ -56,10 +56,10 @@ model Product {
   // Reference sell price (analytics only, not used at sell time)
   sellPrice Decimal @default(0) @db.Decimal(12, 2)
 
-  // Allowed khugra sell units in smallest unit, e.g. [100, 250, 500, 1000, 50000]
+  // Allowed khucra sell units in smallest unit, e.g. [100, 250, 500, 1000, 50000]
   allowedSellUnits Int[] @default([100, 250, 500, 1000])
 
-  // ─── Khugra Inventory Tracking ───────────────────────────────────────────
+  // ─── Khucra Inventory Tracking ───────────────────────────────────────────
   // Total stock always tracked in smallest unit (grams/ml)
   stockInSmallestUnit Int @default(0)
   // Unopened full bags/packages
@@ -168,7 +168,7 @@ model SaleItem {
   id               String  @id @default(cuid())
   saleId           String
   productId        String
-  // Quantity sold in smallest unit (e.g. 250 for 250g khugra)
+  // Quantity sold in smallest unit (e.g. 250 for 250g khucra)
   quantityInSmallestUnit Int
   // Display label e.g. "250g", "1 Bag"
   sellUnitLabel    String

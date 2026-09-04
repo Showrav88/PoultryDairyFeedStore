@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import { addStock } from "@/lib/inventory/khugra";
+import { addStock } from "@/lib/inventory/khucra";
 
 const purchaseSchema = z.object({
   buyerId: z.string(),

@@ -78,11 +78,11 @@ export default function WalletPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">{t.wallet.title}</h1>
+      <h1 className="mb-6 text-xl font-bold sm:text-2xl">{t.wallet.title}</h1>
 
       <div className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white mb-6">
         <p className="text-sm opacity-80">{t.wallet.balance}</p>
-        <p className="text-4xl font-bold mt-1">{formatCurrency(balance)}</p>
+        <p className="mt-1 break-words text-3xl font-bold sm:text-4xl">{formatCurrency(balance)}</p>
       </div>
 
       <div className="flex gap-2 mb-6 flex-wrap">
@@ -99,7 +99,7 @@ export default function WalletPage() {
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6 md:grid-cols-2">
           <div>
             <Label>{t.common.amount}</Label>
             <Input type="number" value={amount} onChange={(e) => setAmount(parseFloat(e.target.value))} />
@@ -129,8 +129,8 @@ export default function WalletPage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-[var(--border)] overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className="min-w-[760px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
               <th className="px-4 py-3 text-left">{t.common.date}</th>

@@ -5,9 +5,9 @@ import {
   getInventorySummary,
   sellUnitLabel,
   formatSmallestUnit,
-} from "./khugra";
+} from "./khucra";
 
-describe("Khugra Inventory Engine", () => {
+describe("Khucra Inventory Engine", () => {
   const baseState = {
     stockInSmallestUnit: 100000, // 100kg total (2 bags of 50kg)
     closedPackages: 2,
@@ -15,7 +15,7 @@ describe("Khugra Inventory Engine", () => {
     basePackageSize: 50000, // 50kg bag
   };
 
-  it("deducts khugra from open bag when enough remaining", () => {
+  it("deducts khucra from open bag when enough remaining", () => {
     const state = { ...baseState, openPackageRemaining: 1000, closedPackages: 1 };
     const result = deductStock(state, 250);
     expect(result.success).toBe(true);
@@ -48,7 +48,7 @@ describe("Khugra Inventory Engine", () => {
     expect(result.newState.stockInSmallestUnit).toBe(250000);
   });
 
-  it("handles multiple khugra sales sequentially", () => {
+  it("handles multiple khucra sales sequentially", () => {
     let state = { ...baseState };
     // Sell 250g
     let r1 = deductStock(state, 250);

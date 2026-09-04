@@ -52,9 +52,9 @@ export default function BuyersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">{t.buyers.title}</h1>
-        <Button onClick={() => setShowForm(!showForm)}>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold sm:text-2xl">{t.buyers.title}</h1>
+        <Button className="min-h-11 shrink-0" onClick={() => setShowForm(!showForm)}>
           <Plus size={18} /> {t.buyers.addBuyer}
         </Button>
       </div>
@@ -68,7 +68,7 @@ export default function BuyersPage() {
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6 md:grid-cols-3">
           <div>
             <Label>{t.common.name}</Label>
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -88,8 +88,8 @@ export default function BuyersPage() {
         </div>
       )}
 
-      <div className="rounded-xl border border-[var(--border)] overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className="min-w-[560px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
               <th className="px-4 py-3 text-left">{t.common.name}</th>

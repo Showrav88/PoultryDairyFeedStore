@@ -7,7 +7,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency } from "@/lib/utils";
-import { KHUGRA_PRESETS } from "@/lib/inventory/khugra";
+import { KHUCRA_PRESETS } from "@/lib/inventory/khucra";
 
 interface Product {
   id: string;
@@ -74,15 +74,15 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">{t.products.title}</h1>
-        <Button onClick={() => setShowForm(!showForm)}>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold sm:text-2xl">{t.products.title}</h1>
+        <Button className="min-h-11 shrink-0" onClick={() => setShowForm(!showForm)}>
           <Plus size={18} /> {t.products.addProduct}
         </Button>
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
+        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>{t.products.productName}</Label>
@@ -123,7 +123,7 @@ export default function ProductsPage() {
             <div>
               <Label>{t.products.allowedSellUnits}</Label>
               <div className="flex flex-wrap gap-2 mt-1">
-                {KHUGRA_PRESETS.map((p) => (
+                {KHUCRA_PRESETS.map((p) => (
                   <button
                     key={p.value}
                     type="button"

@@ -7,7 +7,7 @@ import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { sellUnitLabel } from "@/lib/inventory/khugra";
+import { sellUnitLabel } from "@/lib/inventory/khucra";
 
 interface Product {
   id: string;
@@ -136,32 +136,32 @@ export default function SellCounterPage() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-full">
+    <div className="flex h-full flex-col gap-4 lg:flex-row lg:gap-6">
       {/* Product Grid */}
       <div className="flex-1">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold">{t.sell.title}</h1>
-          <Button variant="outline" size="sm" onClick={() => setShowSearch(!showSearch)}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-xl font-bold sm:text-2xl">{t.sell.title}</h1>
+          <Button className="min-h-11" variant="outline" size="sm" onClick={() => setShowSearch(!showSearch)}>
             <Search size={16} /> {t.sell.searchSale}
           </Button>
         </div>
 
         {showSearch && (
           <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Input
                 placeholder={t.sell.searchSale}
                 value={searchQ}
                 onChange={(e) => setSearchQ(e.target.value)}
-                className="max-w-xs"
+                className="w-full sm:max-w-xs"
               />
               <Input
                 type="date"
                 value={searchDate}
                 onChange={(e) => setSearchDate(e.target.value)}
-                className="max-w-xs"
+                className="w-full sm:max-w-xs"
               />
-              <Button onClick={searchSales}>{t.common.search}</Button>
+              <Button className="min-h-11 w-full sm:w-auto" onClick={searchSales}>{t.common.search}</Button>
             </div>
             {searchResults.length > 0 && (
               <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
@@ -182,12 +182,12 @@ export default function SellCounterPage() {
         )}
 
         <p className="text-sm text-gray-500 mb-3">{t.sell.selectProduct}</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
           {products.map((p) => (
             <button
               key={p.id}
               onClick={() => selectProduct(p)}
-              className={`rounded-xl border-2 p-3 text-left transition-all hover:shadow-md ${
+              className={`min-w-0 rounded-xl border-2 p-2 text-left transition-all hover:shadow-md sm:p-3 ${
                 selectedProduct?.id === p.id
                   ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
                   : "border-[var(--border)] bg-[var(--card)]"
@@ -201,7 +201,7 @@ export default function SellCounterPage() {
                 )}
               </div>
               <h3 className="font-semibold text-sm truncate">{p.name}</h3>
-              <p className="text-xs text-gray-500">{p.productId}</p>
+              <p className="truncate text-xs text-gray-500">{p.productId}</p>
               <p className="text-xs mt-1 text-emerald-600 font-medium">{p.inventory.formattedTotal}</p>
               {p.inventory.formattedOpenBag && (
                 <p className="text-xs text-orange-500">Open: {p.inventory.formattedOpenBag}</p>
@@ -212,9 +212,9 @@ export default function SellCounterPage() {
       </div>
 
       {/* Sell Panel + Cart */}
-      <div className="w-full lg:w-96 space-y-4">
+      <div className="w-full space-y-4 lg:w-96 lg:flex-none">
         {selectedProduct && (
-          <div className="rounded-xl border-2 border-emerald-500 bg-[var(--card)] p-4">
+          <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 max-h-[72dvh] overflow-y-auto rounded-t-2xl border-2 border-emerald-500 bg-[var(--card)] p-4 shadow-2xl lg:static lg:max-h-none lg:rounded-xl lg:shadow-none">
             <div className="flex justify-between items-start mb-3">
               <h3 className="font-bold">{selectedProduct.name}</h3>
               <button onClick={() => setSelectedProduct(null)}><X size={18} /></button>
@@ -223,13 +223,13 @@ export default function SellCounterPage() {
               Stock: {selectedProduct.inventory.formattedTotal} · {selectedProduct.inventory.closedBags} bags
             </p>
 
-            <Label className="mb-1 block">{t.sell.khugra}</Label>
-            <div className="flex flex-wrap gap-1 mb-3">
+            <Label className="mb-1 block">{t.sell.khucra}</Label>
+            <div className="mb-3 flex flex-wrap gap-2">
               {selectedProduct.allowedSellUnits.map((u) => (
                 <button
                   key={u}
                   onClick={() => setSellUnit(u)}
-                  className={`px-2 py-1 rounded text-xs border ${
+                  className={`min-h-11 rounded-lg border px-3 py-2 text-sm ${
                     sellUnit === u ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"
                   }`}
                 >
@@ -238,7 +238,7 @@ export default function SellCounterPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="mb-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <div>
                 <Label>{t.sell.quantity}</Label>
                 <div className="flex items-center gap-2">
@@ -265,7 +265,7 @@ export default function SellCounterPage() {
               Line total: <strong>{formatCurrency(sellPrice * unitCount)}</strong>
             </p>
 
-            <Button className="w-full" onClick={addToCart}>
+            <Button className="min-h-12 w-full" onClick={addToCart}>
               <Plus size={16} /> Add to {t.sell.cart}
             </Button>
           </div>
@@ -327,7 +327,7 @@ export default function SellCounterPage() {
             </p>
           )}
 
-          <Button className="w-full" onClick={completeSale} disabled={cart.length === 0 || loading}>
+          <Button className="min-h-12 w-full" onClick={completeSale} disabled={cart.length === 0 || loading}>
             {t.sell.completeSale}
           </Button>
         </div>

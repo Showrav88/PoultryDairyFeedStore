@@ -1,5 +1,5 @@
 /**
- * Khugra (fractional bag) inventory engine.
+ * Khucra (fractional bag) inventory engine.
  *
  * Problem: Shops buy feed in big bags (e.g. 50kg) but sell in small
  * quantities (100g, 250g, 500g). We must track:
@@ -80,7 +80,7 @@ export function sellUnitLabel(amountInSmallestUnit: number, basePackageSize: num
 }
 
 /**
- * Deduct stock for a khugra or full-bag sale.
+ * Deduct stock for a khucra or full-bag sale.
  * Automatically opens bags when the open bag doesn't have enough.
  */
 export function deductStock(
@@ -193,8 +193,8 @@ export function getInventorySummary(state: InventoryState) {
   };
 }
 
-/** Standard khugra presets for poultry/dairy feed shops */
-export const KHUGRA_PRESETS = [
+/** Standard khucra presets for poultry/dairy feed shops */
+export const KHUCRA_PRESETS = [
   { label: "100g", value: 100 },
   { label: "250g", value: 250 },
   { label: "500g", value: 500 },

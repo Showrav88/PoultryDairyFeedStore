@@ -84,15 +84,15 @@ export default function PurchasesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">{t.purchases.title}</h1>
-        <Button onClick={() => setShowForm(!showForm)}>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold sm:text-2xl">{t.purchases.title}</h1>
+        <Button className="min-h-11 shrink-0" onClick={() => setShowForm(!showForm)}>
           <Plus size={18} /> {t.purchases.newPurchase}
         </Button>
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
+        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <Label>{t.purchases.selectBuyer}</Label>
@@ -121,8 +121,8 @@ export default function PurchasesPage() {
 
           <div className="space-y-2 mb-4">
             {items.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-5 gap-2 items-end">
-                <div className="col-span-2">
+              <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="sm:col-span-2">
                   <Label>{t.purchases.selectProduct}</Label>
                   <select
                     className="w-full h-10 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-900"
@@ -142,9 +142,9 @@ export default function PurchasesPage() {
                   <Label>{t.purchases.costPerUnit}</Label>
                   <Input type="number" value={item.costPricePerUnit} onChange={(e) => updateItem(idx, "costPricePerUnit", parseFloat(e.target.value))} />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex min-h-10 items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
                   <span className="text-sm font-medium">{formatCurrency(item.costPriceTotal)}</span>
-                  <button onClick={() => setItems(items.filter((_, i) => i !== idx))}>
+                  <button className="flex min-h-11 min-w-11 items-center justify-center" onClick={() => setItems(items.filter((_, i) => i !== idx))}>
                     <Trash2 size={16} className="text-red-500" />
                   </button>
                 </div>
@@ -152,10 +152,10 @@ export default function PurchasesPage() {
             ))}
           </div>
 
-          <div className="flex gap-2 items-center">
-            <Button variant="outline" onClick={addItem}><Plus size={16} /> {t.purchases.addItem}</Button>
-            <span className="ml-auto font-bold">{t.common.total}: {formatCurrency(totalCost)}</span>
-            <Button onClick={handleCreate} disabled={!buyerId || items.length === 0}>{t.common.save}</Button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button className="min-h-11" variant="outline" onClick={addItem}><Plus size={16} /> {t.purchases.addItem}</Button>
+            <span className="font-bold sm:ml-auto">{t.common.total}: {formatCurrency(totalCost)}</span>
+            <Button className="min-h-11" onClick={handleCreate} disabled={!buyerId || items.length === 0}>{t.common.save}</Button>
           </div>
         </div>
       )}
