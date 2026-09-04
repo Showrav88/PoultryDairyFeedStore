@@ -2,16 +2,21 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { NextResponse } from "next/server";
 
-const DEPLOY_LOG = "/var/log/newproject-deploy.log";
-
 function tailLog(maxLines = 40): string | undefined {
-  if (!existsSync(DEPLOY_LOG)) return undefined;
-  try {
-    const lines = readFileSync(DEPLOY_LOG, "utf8").trim().split("\n");
-    return lines.slice(-maxLines).join("\n");
-  } catch {
-    return undefined;
+  const paths = [
+    join(process.cwd(), "logs/deploy.log"),
+    "/var/log/newproject-deploy.log",
+  ];
+  for (const path of paths) {
+    if (!existsSync(path)) continue;
+    try {
+      const lines = readFileSync(path, "utf8").trim().split("\n");
+      return lines.slice(-maxLines).join("\n");
+    } catch {
+      continue;
+    }
   }
+  return undefined;
 }
 
 export async function GET() {
@@ -30,9 +35,12 @@ export async function GET() {
     }
   }
 
+  const deployRunning = existsSync(join(appDir, ".deploy.lock"));
+
   return NextResponse.json({
     deploySha,
     deployStatus,
+    deployRunning,
     logTail: tailLog(30),
   });
 }
