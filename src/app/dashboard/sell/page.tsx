@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { ShoppingCart, Search, X, Plus, Minus, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, NumberInput } from "@/components/ui/input";
@@ -67,6 +68,16 @@ interface Sale {
 }
 
 export default function SellCounterPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-gray-500">Loading...</div>}>
+      <SellCounterContent />
+    </Suspense>
+  );
+}
+
+function SellCounterContent() {
+  const searchParams = useSearchParams();
+  const farmerIdParam = searchParams.get("farmerId");
   const { t, locale } = useI18n();
   const { state: confirmState, confirm, close } = useConfirmDialog();
   const [products, setProducts] = useState<Product[]>([]);
@@ -87,6 +98,17 @@ export default function SellCounterPage() {
   const [customAmount, setCustomAmount] = useState(0);
   const [customUnit, setCustomUnit] = useState<CustomSellUnit>("KG");
   const [stockError, setStockError] = useState("");
+  const [farmerId, setFarmerId] = useState<string | null>(farmerIdParam);
+  const [farmerName, setFarmerName] = useState("");
+
+  useEffect(() => {
+    if (farmerIdParam) {
+      setFarmerId(farmerIdParam);
+      fetch(`/api/farmers/${farmerIdParam}`)
+        .then((r) => r.json())
+        .then((d) => setFarmerName(d.farmer?.name ?? ""));
+    }
+  }, [farmerIdParam]);
 
   const getAvailable = (productId: string, totalStock: number) =>
     getAvailableStock(totalStock, cart, productId);
@@ -238,8 +260,9 @@ export default function SellCounterPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            customerName: customerName || undefined,
-            customerPhone: customerPhone || undefined,
+            farmerId: farmerId || undefined,
+            customerName: farmerId ? undefined : customerName || undefined,
+            customerPhone: farmerId ? undefined : customerPhone || undefined,
             paidAmount,
             items: cart.map((i) => ({
               productId: i.productId,
@@ -280,6 +303,14 @@ export default function SellCounterPage() {
         <p className="font-semibold">{t.sell.pricingNotice}</p>
         <p className="mt-1 opacity-90">{t.sell.tapProductHint}</p>
       </div>
+
+      {farmerId && farmerName && (
+        <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm dark:border-emerald-800 dark:bg-emerald-950/30">
+          <p className="font-semibold text-emerald-800 dark:text-emerald-300">
+            {t.farmers.sellToFarmer}: {farmerName}
+          </p>
+        </div>
+      )}
 
       <div className="mb-4 rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] p-4 text-sm text-[var(--info-text)]">
         <p className="font-semibold">Stock comes from Purchases</p>
@@ -662,14 +693,18 @@ export default function SellCounterPage() {
           )}
 
           <div className="space-y-2 mb-3">
-            <div>
-              <Label>{t.sell.customerName} ({t.common.optional})</Label>
-              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={t.common.optional} />
-            </div>
-            <div>
-              <Label>{t.sell.customerPhone} ({t.common.optional})</Label>
-              <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder={t.common.optional} />
-            </div>
+            {!farmerId && (
+              <>
+                <div>
+                  <Label>{t.sell.customerName} ({t.common.optional})</Label>
+                  <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={t.common.optional} />
+                </div>
+                <div>
+                  <Label>{t.sell.customerPhone} ({t.common.optional})</Label>
+                  <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder={t.common.optional} />
+                </div>
+              </>
+            )}
             <div>
               <Label>{t.common.paid}</Label>
               <NumberInput

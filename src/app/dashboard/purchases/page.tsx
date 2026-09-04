@@ -150,7 +150,7 @@ export default function PurchasesPage() {
     <div>
       <div className="mb-4 rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] p-4 text-sm text-[var(--info-text)]">
         <p className="font-semibold">How to add stock:</p>
-        <p className="mt-1">1. Create product in Products → 2. Add buyer in Buyers → 3. New Purchase here (qty = number of bags) → 4. Stock appears in Sell Counter</p>
+        <p className="mt-1">1. Create product in Products → 2. Add supplier in Suppliers → 3. New Purchase here (qty = number of bags) → 4. Stock appears in Sell Counter</p>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
@@ -164,9 +164,9 @@ export default function PurchasesPage() {
         <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="relative">
-              <Label>{t.purchases.selectBuyer}</Label>
+              <Label>{t.purchases.selectSupplier}</Label>
               <Input
-                placeholder={t.buyers.searchByNameOrPhone}
+                placeholder={t.suppliers.searchByNameOrPhone}
                 value={buyerSearch}
                 required
                 onChange={(e) => {
@@ -197,7 +197,7 @@ export default function PurchasesPage() {
                 </div>
               )}
               {buyerSearch && !buyerId && buyerSuggestions.length === 0 && (
-                <p className="text-xs text-orange-600">No buyer found. Add buyer first in Buyers page.</p>
+                <p className="text-xs text-orange-600">{t.suppliers.noSupplierFound}</p>
               )}
             </div>
             <div>

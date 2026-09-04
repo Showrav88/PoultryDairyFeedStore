@@ -8,6 +8,7 @@ import { deductStock } from "@/lib/inventory/khucra";
 import { computeLineProfit } from "@/lib/inventory/avg-cost";
 
 const saleSchema = z.object({
+  farmerId: z.string().optional(),
   customerName: z.string().optional(),
   customerPhone: z.string().optional(),
   paidAmount: z.number().min(0),
@@ -37,6 +38,15 @@ export async function POST(request: Request) {
     const data = saleSchema.parse(body);
 
     const result = await prisma.$transaction(async (tx) => {
+      let farmerName: string | undefined;
+      if (data.farmerId) {
+        const farmer = await tx.farmer.findFirst({
+          where: { id: data.farmerId, shopId: session.shopId, isActive: true },
+        });
+        if (!farmer) throw new Error("Farmer not found");
+        farmerName = farmer.name;
+      }
+
       const products = await tx.product.findMany({
         where: {
           id: { in: data.items.map((i) => i.productId) },
@@ -102,7 +112,8 @@ export async function POST(request: Request) {
       const sale = await tx.sale.create({
         data: {
           shopId: session.shopId,
-          customerName: data.customerName,
+          farmerId: data.farmerId,
+          customerName: data.farmerId ? farmerName : data.customerName,
           customerPhone: data.customerPhone,
           totalAmount,
           totalCost,
@@ -113,7 +124,7 @@ export async function POST(request: Request) {
           notes: data.notes,
           items: { create: lineItems },
         },
-        include: { items: { include: { product: true } } },
+        include: { items: { include: { product: true } }, farmer: true },
       });
 
       for (const update of inventoryUpdates) {
@@ -148,7 +159,7 @@ export async function POST(request: Request) {
             shopId: session.shopId,
             type: "RECEIVABLE",
             amount: dueAmount,
-            note: `Customer due - Sale #${sale.id.slice(-6)}${data.customerName ? ` (${data.customerName})` : ""}`,
+            note: `Customer due - Sale #${sale.id.slice(-6)}${farmerName ? ` (${farmerName})` : data.customerName ? ` (${data.customerName})` : ""}`,
             referenceId: sale.id,
           },
         });
@@ -180,14 +191,20 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q");
+  const farmerId = searchParams.get("farmerId");
   const date = searchParams.get("date");
 
   const where: Record<string, unknown> = { shopId: session.shopId };
+
+  if (farmerId) {
+    where.farmerId = farmerId;
+  }
 
   if (q) {
     where.OR = [
       { customerName: { contains: q, mode: "insensitive" } },
       { customerPhone: { contains: q } },
+      { farmer: { name: { contains: q, mode: "insensitive" } } },
     ];
   }
 
@@ -201,7 +218,7 @@ export async function GET(request: Request) {
 
   const sales = await prisma.sale.findMany({
     where,
-    include: { items: { include: { product: true } } },
+    include: { items: { include: { product: true } }, farmer: true },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
