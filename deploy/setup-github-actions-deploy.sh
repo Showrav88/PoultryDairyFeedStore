@@ -54,17 +54,24 @@ cat <<EOF
 GitHub Actions auto-deploy is ready on this server.
 Add these repository secrets (Settings → Secrets and variables → Actions):
 
-  VPS_HOST
-$(printf '    %s\n' "$VPS_HOST")
+VPS_HOST
+$VPS_HOST
 
-  VPS_USER
-    ${DEPLOY_USER}
+VPS_USER
+${DEPLOY_USER}
 
-  VPS_SSH_KEY
-$(sed 's/^/    /' "$KEY_PATH")
+VPS_SSH_KEY
+(copy ALL lines below exactly — no leading spaces, no quotes)
+EOF
+cat "$KEY_PATH"
+cat <<EOF
 
-  VPS_KNOWN_HOSTS
-$(ssh-keyscan -H "$VPS_HOST" 2>/dev/null | sed 's/^/    /')
+VPS_KNOWN_HOSTS
+(copy ALL lines below — ending with = is normal)
+EOF
+ssh-keyscan -H "$VPS_HOST" 2>/dev/null
+
+cat <<EOF
 
 After saving secrets, push to main or re-run the "Deploy to Hostinger VPS" workflow.
 ================================================================================

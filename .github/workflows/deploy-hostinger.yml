@@ -39,9 +39,18 @@ jobs:
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+
+          # Normalize key: remove Windows CR, trim accidental leading spaces per line
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' | sed '/./s/^[[:space:]]*//' > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+          if ! ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null 2>&1; then
+            echo "::error::VPS_SSH_KEY is invalid (libcrypto error). Re-copy the private key from the VPS."
+            echo "Must include BEGIN/END lines, no extra spaces at line start, no quotes."
+            exit 1
+          fi
+
+          printf '%s\n' "$VPS_KNOWN_HOSTS" | tr -d '\r' | sed '/./s/^[[:space:]]*//' > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Deploy main to VPS

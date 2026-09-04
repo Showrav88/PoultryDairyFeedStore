@@ -236,17 +236,13 @@ In GitHub, open **Settings → Secrets and variables → Actions** and add:
 
 - `VPS_HOST`: `31.97.50.25`
 - `VPS_USER`: `newproject`
-- `VPS_SSH_KEY`: output of:
+- `VPS_SSH_KEY`: private key from the script output. Copy **every line** from
+  `-----BEGIN OPENSSH PRIVATE KEY-----` through `-----END OPENSSH PRIVATE KEY-----`.
+  Do **not** add quotes, spaces at the start of lines, or extra blank lines.
 
-  ```bash
-  sudo cat /home/newproject/.ssh/github_actions
-  ```
-
-- `VPS_KNOWN_HOSTS`: run this on a trusted computer and paste the output:
-
-  ```bash
-  ssh-keyscan -H 31.97.50.25
-  ```
+- `VPS_KNOWN_HOSTS`: output of `ssh-keyscan -H 31.97.50.25`. Lines often end
+  with `=` — that is normal base64, not an error. Do not add spaces before or
+  after the line.
 
 Every push to `main` will then:
 
