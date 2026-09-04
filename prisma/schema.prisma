@@ -23,6 +23,7 @@ model Shop {
   products           Product[]
   buyers             Buyer[]
   farmers            Farmer[]
+  farms              Farm[]
   purchases          Purchase[]
   sales              Sale[]
   wallet             Wallet?
@@ -78,6 +79,8 @@ model Product {
   shop          Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
   purchaseItems PurchaseItem[]
   saleItems     SaleItem[]
+  farmIssueItems FarmIssueItem[]
+  farmReturnItems FarmReturnItem[]
 
   @@unique([shopId, productId])
   @@index([shopId])
@@ -262,6 +265,11 @@ enum WalletTxType {
   RECEIVABLE
   PAYABLE
   ADJUSTMENT
+  FARM_ISSUE
+  FARM_RETURN
+  FARM_EXPENSE
+  FARM_LIVESTOCK_BUY
+  FARM_LIVESTOCK_SELL
 }
 
 enum ExpenseCategory {
@@ -311,10 +319,169 @@ enum AuditEntity {
   PRODUCT
   BUYER
   FARMER
+  FARM
   PURCHASE
   SALE
   WALLET
   SHOP
+}
+
+// ─── Own Farms (internal — any domestic animals) ────────────────────────────
+
+enum FarmAnimalType {
+  POULTRY
+  COW
+  FISH
+  DUCK
+  GOAT
+  SHEEP
+  RABBIT
+  OTHER
+}
+
+enum FarmReturnStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum FarmExpenseType {
+  SALARY
+  BILL
+  UTILITY
+  OTHER
+}
+
+enum FarmLivestockTxType {
+  BUY
+  SELL
+}
+
+model Farm {
+  id         String         @id @default(cuid())
+  shopId     String
+  name       String
+  animalType FarmAnimalType @default(OTHER)
+  location   String?
+  notes      String?
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  shop       Shop                      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  issues     FarmIssue[]
+  returns    FarmReturn[]
+  expenses   FarmExpense[]
+  livestock  FarmLivestockTransaction[]
+
+  @@index([shopId])
+  @@index([shopId, name])
+}
+
+model FarmIssue {
+  id         String   @id @default(cuid())
+  shopId     String
+  farmId     String
+  totalCost  Decimal  @db.Decimal(12, 2)
+  notes      String?
+  confirmedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  farm  Farm            @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  items FarmIssueItem[]
+
+  @@index([shopId])
+  @@index([farmId])
+  @@index([farmId, createdAt])
+}
+
+model FarmIssueItem {
+  id                     String  @id @default(cuid())
+  farmIssueId            String
+  productId              String
+  quantityInSmallestUnit Int
+  sellUnitLabel          String
+  unitCount              Int     @default(1)
+  costPerSmallestUnit    Decimal @db.Decimal(12, 6)
+  costTotal              Decimal @db.Decimal(12, 2)
+
+  farmIssue FarmIssue @relation(fields: [farmIssueId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@index([farmIssueId])
+}
+
+model FarmReturn {
+  id          String           @id @default(cuid())
+  shopId      String
+  farmId      String
+  farmIssueId String?
+  status      FarmReturnStatus @default(PENDING)
+  totalCost   Decimal          @default(0) @db.Decimal(12, 2)
+  notes       String?
+  approvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  farm  Farm               @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  items FarmReturnItem[]
+
+  @@index([shopId])
+  @@index([farmId])
+  @@index([farmId, status])
+}
+
+model FarmReturnItem {
+  id                     String  @id @default(cuid())
+  farmReturnId           String
+  productId              String
+  quantityInSmallestUnit Int
+  sellUnitLabel          String
+  unitCount              Int     @default(1)
+  costPerSmallestUnit    Decimal @db.Decimal(12, 6)
+  costTotal              Decimal @db.Decimal(12, 2)
+
+  farmReturn FarmReturn @relation(fields: [farmReturnId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([farmReturnId])
+}
+
+model FarmExpense {
+  id          String          @id @default(cuid())
+  shopId      String
+  farmId      String
+  type        FarmExpenseType
+  amount      Decimal         @db.Decimal(12, 2)
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  farm Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([farmId])
+  @@index([farmId, createdAt])
+}
+
+model FarmLivestockTransaction {
+  id          String              @id @default(cuid())
+  shopId      String
+  farmId      String
+  type        FarmLivestockTxType
+  description String
+  quantity    Int                 @default(1)
+  amount      Decimal             @db.Decimal(12, 2)
+  notes       String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  farm Farm @relation(fields: [farmId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([farmId])
+  @@index([farmId, createdAt])
 }
 
 model AuditLog {
