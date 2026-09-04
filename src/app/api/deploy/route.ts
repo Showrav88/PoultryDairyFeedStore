@@ -6,6 +6,10 @@ import { NextRequest, NextResponse } from "next/server";
 const execFileAsync = promisify(execFile);
 const DEPLOY_CMD = "/usr/local/sbin/deploy-newproject";
 
+function normalizeSecret(value: string | undefined): string {
+  return (value ?? "").trim().replace(/^["']|["']$/g, "");
+}
+
 function safeEqual(a: string, b: string): boolean {
   const aHash = createHash("sha256").update(a).digest();
   const bHash = createHash("sha256").update(b).digest();
@@ -13,7 +17,7 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  const secret = process.env.DEPLOY_WEBHOOK_SECRET;
+  const secret = normalizeSecret(process.env.DEPLOY_WEBHOOK_SECRET);
   if (!secret) {
     return NextResponse.json(
       { error: "DEPLOY_WEBHOOK_SECRET is not configured on the server" },
@@ -22,9 +26,12 @@ export async function POST(request: NextRequest) {
   }
 
   const auth = request.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  const token = normalizeSecret(auth.startsWith("Bearer ") ? auth.slice(7) : auth);
   if (!token || !safeEqual(token, secret)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Invalid deploy webhook secret. Match GitHub DEPLOY_WEBHOOK_SECRET with VPS .env exactly." },
+      { status: 401 }
+    );
   }
 
   const body = await request.json().catch(() => ({}));
