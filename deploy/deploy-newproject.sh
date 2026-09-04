@@ -103,6 +103,9 @@ echo "$DEPLOYING_SHA" | sudo -u newproject tee "$APP_DIR/.deploy-sha" >/dev/null
 echo "Building commit $DEPLOYING_SHA ..."
 write_status "building" "$DEPLOYING_SHA" "Installing dependencies and building"
 
+# Stop before overwriting .next — building while next start is running causes 500 errors.
+systemctl stop newproject-api.service 2>/dev/null || true
+
 sudo -u newproject -H bash -lc "
   set -Eeuo pipefail
   cd '$APP_DIR'
@@ -118,8 +121,8 @@ sudo -u newproject -H bash -lc "
   npx prisma migrate deploy
 "
 
-write_status "restarting" "$DEPLOYING_SHA" "Restarting application service"
-systemctl restart newproject-api.service
+write_status "restarting" "$DEPLOYING_SHA" "Starting application service"
+systemctl start newproject-api.service
 
 echo "Waiting for newproject-api.service to become healthy..."
 sleep 5

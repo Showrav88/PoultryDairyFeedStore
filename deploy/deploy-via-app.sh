@@ -29,6 +29,32 @@ on_error() {
 }
 trap 'on_error $LINENO $?' ERR
 
+cleanup() {
+  rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+stop_service() {
+  sudo -n /usr/bin/systemctl stop newproject-api.service 2>/dev/null ||
+    sudo -n /bin/systemctl stop newproject-api.service 2>/dev/null ||
+    systemctl stop newproject-api.service 2>/dev/null || true
+}
+
+start_service() {
+  if sudo -n /usr/bin/systemctl start newproject-api.service 2>/dev/null; then
+    echo "Started via sudo systemctl"
+  elif sudo -n /bin/systemctl start newproject-api.service 2>/dev/null; then
+    echo "Started via sudo systemctl"
+  elif systemctl start newproject-api.service 2>/dev/null; then
+    echo "Started via systemctl"
+  else
+    echo "WARNING: Could not start service. Run on VPS:"
+    echo "  sudo systemctl start newproject-api.service"
+    write_status "failed" "$DEPLOYING_SHA" "Could not start service — run sudo systemctl restart newproject-api.service"
+    exit 1
+  fi
+}
+
 exec 200>"$LOCK_FILE"
 if ! flock -n 200; then
   echo "Another app deploy is already running."
@@ -54,6 +80,9 @@ echo "$DEPLOYING_SHA" > "$APP_DIR/.deploy-sha"
 echo "Building commit $DEPLOYING_SHA ..."
 write_status "building" "$DEPLOYING_SHA" "Installing dependencies and building"
 
+# Stop before overwriting .next — building while next start is running causes 500 errors.
+stop_service
+
 if [[ -f .env ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -66,19 +95,9 @@ npm ci --include=dev
 npm run build
 npx prisma migrate deploy
 
-write_status "restarting" "$DEPLOYING_SHA" "Restarting application"
+write_status "restarting" "$DEPLOYING_SHA" "Starting application"
 
-# Graceful restart via systemd (preferred). Do NOT use fuser -k — it causes site downtime.
-if sudo -n systemctl restart newproject-api.service 2>/dev/null; then
-  echo "Restarted via sudo systemctl"
-elif systemctl restart newproject-api.service 2>/dev/null; then
-  echo "Restarted via systemctl"
-else
-  echo "WARNING: Could not restart service. Run on VPS:"
-  echo "  sudo systemctl restart newproject-api.service"
-  write_status "failed" "$DEPLOYING_SHA" "Could not restart service — run sudo systemctl restart newproject-api.service"
-  exit 1
-fi
+start_service
 
 sleep 5
 

@@ -46,5 +46,3 @@ fi
 
 rm -f "$LOCK_FILE" "$PID_FILE" "$APP_LOCK_FILE"
 echo "Deploy lock cleared."
-echo "Restart app:  sudo systemctl restart newproject-api.service"
-echo "Run deploy:   sudo /usr/local/sbin/deploy-newproject"

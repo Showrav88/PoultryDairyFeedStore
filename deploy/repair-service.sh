@@ -51,6 +51,11 @@ systemctl status newproject-api.service --no-pager -l || true
 
 echo "6. Health ..."
 if curl --fail --silent http://127.0.0.1:5001/api/health; then
+  SHA="$(sudo -u "${APP_USER}" git -C "$APP_DIR" rev-parse --short HEAD)"
+  printf '{"state":"ready","sha":"%s","message":"Repaired via repair-service.sh","updatedAt":"%s"}\n' \
+    "$SHA" "$(date -Is)" > "${APP_DIR}/.deploy-status"
+  chown "${APP_USER}:${APP_USER}" "${APP_DIR}/.deploy-status"
+  rm -f "${APP_DIR}/.deploy.lock"
   echo ""
   echo "Repair OK — app is healthy."
 else

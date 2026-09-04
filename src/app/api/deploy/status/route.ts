@@ -1,23 +1,15 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { NextResponse } from "next/server";
+import { tailDeployLog } from "@/lib/deploy/log-tail";
 
-function tailLog(maxLines = 40): string | undefined {
-  const paths = [
-    join(process.cwd(), "logs/deploy.log"),
-    "/var/log/newproject-deploy.log",
-  ];
-  for (const path of paths) {
-    if (!existsSync(path)) continue;
-    try {
-      const lines = readFileSync(path, "utf8").trim().split("\n");
-      return lines.slice(-maxLines).join("\n");
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
-}
+const ACTIVE_DEPLOY_STATES = new Set([
+  "started",
+  "pulling",
+  "building",
+  "restarting",
+  "running",
+]);
 
 export async function GET() {
   const appDir = process.cwd();
@@ -35,12 +27,12 @@ export async function GET() {
     }
   }
 
-  const deployRunning = existsSync(join(appDir, ".deploy.lock"));
+  const deployRunning = ACTIVE_DEPLOY_STATES.has(deployStatus?.state ?? "");
 
   return NextResponse.json({
     deploySha,
     deployStatus,
     deployRunning,
-    logTail: tailLog(30),
+    logTail: tailDeployLog(30),
   });
 }

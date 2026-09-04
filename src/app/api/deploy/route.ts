@@ -1,10 +1,9 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { spawn } from "child_process";
-import { readFileSync, existsSync } from "fs";
+import { existsSync } from "fs";
 import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
-
-const SYSTEM_LOG = "/var/log/newproject-deploy.log";
+import { tailDeployLog } from "@/lib/deploy/log-tail";
 
 function normalizeSecret(value: string | undefined): string {
   return (value ?? "").trim().replace(/^["']|["']$/g, "");
@@ -14,23 +13,6 @@ function safeEqual(a: string, b: string): boolean {
   const aHash = createHash("sha256").update(a).digest();
   const bHash = createHash("sha256").update(b).digest();
   return timingSafeEqual(aHash, bHash);
-}
-
-function tailLog(maxLines = 80): string | undefined {
-  const paths = [
-    join(process.cwd(), "logs/deploy.log"),
-    SYSTEM_LOG,
-  ];
-  for (const path of paths) {
-    if (!existsSync(path)) continue;
-    try {
-      const lines = readFileSync(path, "utf8").trim().split("\n");
-      return lines.slice(-maxLines).join("\n");
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
 }
 
 export async function POST(request: NextRequest) {
@@ -54,25 +36,42 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const sha = typeof body.sha === "string" ? body.sha : "unknown";
 
+  const webhookScript = join(process.cwd(), "deploy/webhook-deploy.sh");
   const deployScript = join(process.cwd(), "deploy/deploy-via-app.sh");
-  const sbinDeploy = "/usr/local/sbin/deploy-newproject";
 
-  // Prefer no-sudo deploy (same user as the running app). Fall back to sudo wrapper if script missing.
-  const useAppDeploy = existsSync(deployScript);
-  const child = useAppDeploy
-    ? spawn("bash", [deployScript], { detached: true, stdio: "ignore", cwd: process.cwd() })
-    : spawn("sudo", [sbinDeploy], { detached: true, stdio: "ignore" });
+  const script = existsSync(webhookScript)
+    ? webhookScript
+    : existsSync(deployScript)
+      ? deployScript
+      : null;
+
+  if (!script) {
+    return NextResponse.json(
+      { error: "Deploy scripts are missing on the server" },
+      { status: 503 }
+    );
+  }
+
+  const child = spawn("bash", [script], { detached: true, stdio: "ignore", cwd: process.cwd() });
   child.unref();
+
+  const mode =
+    script === webhookScript
+      ? "webhook"
+      : script === deployScript
+        ? "app-user"
+        : "sudo";
 
   return NextResponse.json(
     {
       status: "accepted",
       sha,
-      mode: useAppDeploy ? "app-user" : "sudo",
-      message: useAppDeploy
-        ? "Deploy started (app user). Check /api/health and logs/deploy.log."
-        : "Deploy started (sudo). Check /api/health and /var/log/newproject-deploy.log.",
-      logTail: tailLog(20),
+      mode,
+      message:
+        mode === "webhook"
+          ? "Deploy started (sudo deploy-newproject with app-user fallback). Check /api/health."
+          : "Deploy started (app user). Check /api/health and logs/deploy.log.",
+      logTail: tailDeployLog(20),
     },
     { status: 202 }
   );
