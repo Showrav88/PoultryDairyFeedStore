@@ -48,7 +48,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <aside className="hidden w-64 flex-shrink-0 border-r border-[var(--border)] bg-[var(--card)] md:flex md:flex-col">
         <div className="p-4 border-b border-[var(--border)]">
           <h1 className="text-lg font-bold text-emerald-600">🐔 {t.app.name}</h1>
-          <p className="text-xs text-gray-500">{t.app.tagline}</p>
+          <p className="text-xs text-[var(--muted)]">{t.app.tagline}</p>
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map(({ href, icon: Icon, key }) => (
@@ -59,7 +59,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 pathname === href
                   ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                  : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+                  : "text-[var(--muted)] hover:bg-[var(--border)]/30"
               )}
             >
               <Icon size={18} />
@@ -110,7 +110,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
               <div>
                 <h1 className="font-bold text-emerald-600">🐔 {t.app.name}</h1>
-                <p className="text-xs text-gray-500">{t.app.tagline}</p>
+                <p className="text-xs text-[var(--muted)]">{t.app.tagline}</p>
               </div>
               <button
                 className="flex min-h-11 min-w-11 items-center justify-center"
@@ -130,7 +130,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                     "flex min-h-12 items-center gap-3 rounded-lg px-3 text-sm font-medium",
                     pathname === href
                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                      : "text-gray-600 dark:text-gray-300"
+                      : "text-[var(--muted)]"
                   )}
                 >
                   <Icon size={20} />
@@ -155,7 +155,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             href={href}
             className={cn(
               "flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-medium",
-              pathname === href ? "text-emerald-600" : "text-gray-500"
+              pathname === href ? "text-emerald-600" : "text-[var(--muted)]"
             )}
           >
             <Icon size={21} />

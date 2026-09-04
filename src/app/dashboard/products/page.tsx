@@ -173,10 +173,10 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/40">
+      <div className="mb-4 rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] p-4 text-sm text-[var(--info-text)]">
         <p className="font-semibold">Simple workflow</p>
         <p className="mt-1">1. Add product here → 2. Purchase (bags/pieces) → 3. Sell on counter</p>
-        <p className="mt-1 text-blue-800 dark:text-blue-200">{t.products.feedExample}</p>
+        <p className="mt-1 opacity-90">{t.products.feedExample}</p>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
@@ -189,7 +189,7 @@ export default function ProductsPage() {
       {showForm && (
         <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
           <h2 className="mb-1 font-semibold">{editingId ? "Edit Product" : "New Product"}</h2>
-          <p className="mb-4 text-sm text-gray-500">{t.products.selectTypeFirst}</p>
+          <p className="mb-4 text-sm text-[var(--muted)]">{t.products.selectTypeFirst}</p>
 
           <Label className="mb-2 block">{t.products.productType}</Label>
           <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

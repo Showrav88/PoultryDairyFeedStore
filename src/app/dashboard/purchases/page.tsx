@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label, NumberInput } from "@/components/ui/input";
+import { Input, Label, NumberInput, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -148,7 +148,7 @@ export default function PurchasesPage() {
 
   return (
     <div>
-      <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+      <div className="mb-4 rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] p-4 text-sm text-[var(--info-text)]">
         <p className="font-semibold">How to add stock:</p>
         <p className="mt-1">1. Create product in Products → 2. Add buyer in Buyers → 3. New Purchase here (qty = number of bags) → 4. Stock appears in Sell Counter</p>
       </div>
@@ -219,8 +219,7 @@ export default function PurchasesPage() {
               <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-2 lg:grid-cols-5">
                 <div className="sm:col-span-2">
                   <Label>{t.purchases.selectProduct}</Label>
-                  <select
-                    className="w-full h-10 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-900"
+                  <Select
                     value={item.productId}
                     required
                     onChange={(e) => updateItem(idx, "productId", e.target.value)}
@@ -228,7 +227,7 @@ export default function PurchasesPage() {
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>{p.name} ({p.productId})</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <Label>Qty (bags) *</Label>
@@ -247,6 +246,11 @@ export default function PurchasesPage() {
                     value={item.costPricePerUnit}
                     onChange={(v) => updateItem(idx, "costPricePerUnit", v)}
                   />
+                  {item.costPricePerUnit > 0 && item.quantity > 0 && (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Line: {item.quantity} × {formatCurrency(item.costPricePerUnit)} = {formatCurrency(item.costPriceTotal)}
+                    </p>
+                  )}
                 </div>
                 <div className="flex min-h-10 items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
                   <span className="text-sm font-medium">{formatCurrency(item.costPriceTotal)}</span>
@@ -262,7 +266,7 @@ export default function PurchasesPage() {
             <Button className="min-h-11" variant="outline" onClick={addItem} disabled={products.length === 0}>
               <Plus size={16} /> {t.purchases.addItem}
             </Button>
-            <span className="font-bold sm:ml-auto">{t.common.total}: {formatCurrency(totalCost)}</span>
+            <span className="font-bold sm:ml-auto text-[var(--foreground)]">{t.common.total}: {formatCurrency(totalCost)}</span>
             <Button className="min-h-11" onClick={handleCreate} disabled={!purchaseFormValid || loading}>{t.common.save}</Button>
           </div>
         </div>

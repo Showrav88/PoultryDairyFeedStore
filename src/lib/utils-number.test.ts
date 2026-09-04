@@ -13,8 +13,8 @@ describe("number field helpers", () => {
     expect(parseOptionalAmountInput("abc")).toBe(0);
   });
 
-  it("parses valid numbers", () => {
-    expect(parseOptionalAmountInput("18")).toBe(18);
+  it("parses partial decimals while typing", () => {
+    expect(parseOptionalAmountInput("0.")).toBe(0);
     expect(parseOptionalAmountInput("425.5")).toBe(425.5);
   });
 });

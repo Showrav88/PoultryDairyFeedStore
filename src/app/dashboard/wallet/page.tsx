@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label, NumberInput } from "@/components/ui/input";
+import { Input, Label, NumberInput, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -111,15 +111,14 @@ export default function WalletPage() {
           {txType === "EXPENSE" && (
             <div>
               <Label>{t.wallet.category}</Label>
-              <select
-                className="w-full h-10 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-900"
+              <Select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
                 {expenseCategories.map((c) => (
                   <option key={c} value={c}>{categoryLabel(c)}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
           <div className="md:col-span-2">
