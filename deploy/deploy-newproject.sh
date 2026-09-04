@@ -112,7 +112,8 @@ sudo -u newproject -H bash -lc "
     source .env
     set +a
   fi
-  npm ci
+  # Build needs devDependencies (typescript, etc.) even when NODE_ENV=production.
+  npm ci --include=dev
   npm run build
   npx prisma migrate deploy
 "
