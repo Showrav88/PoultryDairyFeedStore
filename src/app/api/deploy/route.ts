@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const sha = typeof body.sha === "string" ? body.sha : "unknown";
 
-  // Must match sudoers exactly: NOPASSWD: /usr/local/sbin/deploy-newproject
+  // Must match sudoers: NOPASSWD: /usr/local/sbin/deploy-newproject
+  // Wrapper always execs repo deploy/deploy-newproject.sh (self-updates on each run).
   const child = spawn("sudo", [DEPLOY_CMD], { detached: true, stdio: "ignore" });
   child.unref();
 

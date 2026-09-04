@@ -20,9 +20,9 @@ if ! id "$DEPLOY_USER" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -x "$DEPLOY_CMD" ]]; then
-  echo "Deploy command missing at $DEPLOY_CMD"
-  exit 1
+if [[ ! -x "$DEPLOY_CMD" ]] || ! grep -q 'deploy/deploy-newproject.sh' "$DEPLOY_CMD" 2>/dev/null; then
+  echo "Installing deploy wrapper at $DEPLOY_CMD ..."
+  install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$DEPLOY_CMD"
 fi
 
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: ${DEPLOY_CMD}" > "$SUDOERS_FILE"

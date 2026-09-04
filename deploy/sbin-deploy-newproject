@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Installed to /usr/local/sbin/deploy-newproject — always runs the repo deploy script.
+set -euo pipefail
+APP_DIR="/var/www/NEWPROJECT"
+exec bash "${APP_DIR}/deploy/deploy-newproject.sh"
