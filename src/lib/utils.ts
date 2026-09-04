@@ -30,3 +30,15 @@ export function formatDateTime(date: Date | string, locale = "en"): string {
     hour12: true,
   });
 }
+
+/** Empty input when amount is 0 — avoids showing 0 in payment fields */
+export function formatOptionalAmount(value: number): string {
+  return value === 0 ? "" : String(value);
+}
+
+export function parseOptionalAmountInput(raw: string): number {
+  const trimmed = raw.trim();
+  if (!trimmed) return 0;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
