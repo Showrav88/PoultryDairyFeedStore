@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, Store, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Store, ChevronRight, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -46,6 +46,8 @@ export default function FarmersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", address: "", openingDue: 0 });
   const [loading, setLoading] = useState(false);
+  const [collectFarmerId, setCollectFarmerId] = useState<string | null>(null);
+  const [collectAmount, setCollectAmount] = useState(0);
 
   const load = (q?: string) => {
     const params = q ? `?q=${encodeURIComponent(q)}` : "";
@@ -108,6 +110,34 @@ export default function FarmersPage() {
         close();
       }
     }, { message: `Delete farmer "${f.name}"? (Only if no due balance)` });
+  };
+
+  const openCollect = (f: Farmer) => {
+    setCollectFarmerId(f.id);
+    setCollectAmount(f.totalDue);
+  };
+
+  const saveCollect = () => {
+    if (!collectFarmerId || collectAmount <= 0) return;
+    confirm(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/farmers/${collectFarmerId}/payments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount: collectAmount }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        setCollectFarmerId(null);
+        setCollectAmount(0);
+        load(search);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Payment failed");
+      } finally {
+        setLoading(false);
+        close();
+      }
+    }, { message: `${t.farmers.collectPayment}: ${formatCurrency(collectAmount)}?` });
   };
 
   const sorted = [...farmers].sort((a, b) => {
@@ -178,6 +208,11 @@ export default function FarmersPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                {f.totalDue > 0 && (
+                  <Button size="sm" variant="outline" className="min-h-9 gap-1" onClick={() => openCollect(f)}>
+                    <Banknote size={14} /> {t.farmers.collectPayment}
+                  </Button>
+                )}
                 <Link href={`/dashboard/sell?farmerId=${f.id}`}>
                   <Button size="sm" className="min-h-9 gap-1">
                     <Store size={14} /> {t.farmers.sellToFarmer}
@@ -206,6 +241,21 @@ export default function FarmersPage() {
         ))}
         {sorted.length === 0 && <p className="text-center text-gray-500 py-8">{t.common.noData}</p>}
       </div>
+
+      {collectFarmerId && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <h3 className="font-semibold mb-1">{t.farmers.collectPayment}</h3>
+            <p className="mb-3 text-sm text-gray-500">{t.farmers.collectHelp}</p>
+            <Label>{t.farmers.paymentAmount}</Label>
+            <NumberInput value={collectAmount} onChange={setCollectAmount} className="mb-4" />
+            <div className="flex gap-2">
+              <Button onClick={saveCollect} disabled={collectAmount <= 0}>{t.common.save}</Button>
+              <Button variant="outline" onClick={() => setCollectFarmerId(null)}>{t.common.cancel}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog open={confirmState.open} message={confirmState.message} onConfirm={confirmState.onConfirm} onCancel={close} loading={loading} />
     </div>

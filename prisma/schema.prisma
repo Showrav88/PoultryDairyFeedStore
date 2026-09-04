@@ -120,6 +120,7 @@ model Farmer {
 
   shop  Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
   sales Sale[]
+  payments FarmerPayment[]
 
   @@index([shopId])
   @@index([shopId, name])
@@ -189,6 +190,7 @@ model Sale {
   shop   Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
   farmer Farmer? @relation(fields: [farmerId], references: [id])
   items  SaleItem[]
+  paymentAllocations FarmerPaymentAllocation[]
 
   @@index([shopId])
   @@index([shopId, createdAt])
@@ -216,6 +218,39 @@ model SaleItem {
   sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
 
+  @@index([saleId])
+}
+
+// ─── Farmer payments (credit collection history) ─────────────────────────────
+
+model FarmerPayment {
+  id        String   @id @default(cuid())
+  shopId    String
+  farmerId  String
+  amount    Decimal  @db.Decimal(12, 2)
+  note      String?
+  saleId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  farmer      Farmer                      @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  allocations FarmerPaymentAllocation[]
+
+  @@index([shopId])
+  @@index([farmerId])
+  @@index([farmerId, createdAt])
+}
+
+model FarmerPaymentAllocation {
+  id        String  @id @default(cuid())
+  paymentId String
+  saleId    String?
+  amount    Decimal @db.Decimal(12, 2)
+
+  payment FarmerPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  sale    Sale?         @relation(fields: [saleId], references: [id])
+
+  @@index([paymentId])
   @@index([saleId])
 }
 

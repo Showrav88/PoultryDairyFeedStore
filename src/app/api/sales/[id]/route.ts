@@ -3,16 +3,16 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { collectFarmerPayment } from "@/lib/farmers/payments";
 
-const updateSchema = z.object({
-  paidAmount: z.number().min(0),
-});
-
-function calcPaymentStatus(total: number, paid: number) {
-  if (paid >= total) return "PAID";
-  if (paid > 0) return "PARTIAL";
-  return "DUE";
-}
+const updateSchema = z
+  .object({
+    paidAmount: z.number().min(0).optional(),
+    additionalAmount: z.number().positive().optional(),
+  })
+  .refine((d) => d.paidAmount !== undefined || d.additionalAmount !== undefined, {
+    message: "Provide paidAmount or additionalAmount",
+  });
 
 export async function PATCH(
   request: Request,
@@ -27,70 +27,53 @@ export async function PATCH(
     const body = await request.json();
     const data = updateSchema.parse(body);
 
-    const existing = await prisma.sale.findFirst({ where: { id, shopId: session.shopId } });
+    const existing = await prisma.sale.findFirst({
+      where: { id, shopId: session.shopId },
+      include: { farmer: true },
+    });
     if (!existing) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
-
-    const totalAmount = Number(existing.totalAmount);
-    if (data.paidAmount > totalAmount) {
-      return NextResponse.json({ error: "Paid amount cannot exceed total" }, { status: 400 });
+    if (!existing.farmerId || !existing.farmer) {
+      return NextResponse.json({ error: "This sale is not linked to a farmer" }, { status: 400 });
     }
 
     const oldPaid = Number(existing.paidAmount);
-    const paymentDelta = data.paidAmount - oldPaid;
-    const newDue = Math.max(0, totalAmount - data.paidAmount);
-    const oldDue = Number(existing.dueAmount);
+    let additional = data.additionalAmount;
+    if (additional === undefined && data.paidAmount !== undefined) {
+      additional = data.paidAmount - oldPaid;
+    }
+    if (!additional || additional <= 0) {
+      return NextResponse.json({ error: "Payment amount must be greater than zero" }, { status: 400 });
+    }
 
     const result = await prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.update({
+      const paymentResult = await collectFarmerPayment(tx, {
+        shopId: session.shopId,
+        farmerId: existing.farmerId!,
+        farmerName: existing.farmer!.name,
+        amount: additional!,
+        note: `Sale #${id.slice(-6)} payment`,
+        targetSaleId: id,
+      });
+
+      const sale = await tx.sale.findUnique({
         where: { id },
-        data: {
-          paidAmount: data.paidAmount,
-          dueAmount: newDue,
-          status: calcPaymentStatus(totalAmount, data.paidAmount),
-        },
         include: { items: { include: { product: true } } },
       });
 
-      if (paymentDelta !== 0) {
-        const wallet = await tx.wallet.findUnique({ where: { shopId: session.shopId } });
-        if (wallet) {
-          await tx.wallet.update({
-            where: { shopId: session.shopId },
-            data: { balance: { increment: paymentDelta } },
-          });
-          await tx.walletTransaction.create({
-            data: {
-              shopId: session.shopId,
-              type: paymentDelta > 0 ? "SALE_INCOME" : "ADJUSTMENT",
-              amount: Math.abs(paymentDelta),
-              note: `Sale payment update #${sale.id.slice(-6)}`,
-              referenceId: sale.id,
-            },
-          });
-        }
-      }
-
-      const dueDelta = newDue - oldDue;
-      if (dueDelta !== 0) {
-        await tx.walletTransaction.create({
-          data: {
-            shopId: session.shopId,
-            type: "RECEIVABLE",
-            amount: Math.abs(dueDelta),
-            note:
-              dueDelta > 0
-                ? `Customer due increased #${sale.id.slice(-6)}`
-                : `Customer due collected #${sale.id.slice(-6)}`,
-            referenceId: sale.id,
-          },
-        });
-      }
-
-      return sale;
+      return { sale, paymentResult };
     });
 
-    await logAudit(session.shopId, "SALE", id, "UPDATE", `Sale payment updated`, existing, result);
-    return NextResponse.json({ sale: result });
+    await logAudit(
+      session.shopId,
+      "SALE",
+      id,
+      "UPDATE",
+      `Sale payment collected: ৳${additional}`,
+      existing,
+      result.sale
+    );
+
+    return NextResponse.json({ sale: result.sale, payment: result.paymentResult });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Update failed";
     if (err instanceof z.ZodError) {
