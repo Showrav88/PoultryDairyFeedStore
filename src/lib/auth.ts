@@ -54,9 +54,15 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 export async function setSessionCookie(token: string) {
   const cookieStore = await cookies();
+  const secure =
+    process.env.COOKIE_SECURE === "true" ||
+    (process.env.COOKIE_SECURE !== "false" &&
+      process.env.NODE_ENV === "production" &&
+      process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") === true);
+
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 7,
     path: "/",
