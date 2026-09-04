@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDateTime, formatOptionalAmount, parseOptionalAmountInput } from "@/lib/utils";
 
 interface Buyer { id: string; name: string; phone: string; }
 interface Product { id: string; name: string; productId: string; }
@@ -190,7 +190,13 @@ export default function PurchasesPage() {
             </div>
             <div>
               <Label>{t.common.paid}</Label>
-              <Input type="number" value={paidAmount} onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)} />
+              <Input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={formatOptionalAmount(paidAmount)}
+                onChange={(e) => setPaidAmount(parseOptionalAmountInput(e.target.value))}
+              />
               <p className="mt-1 text-xs text-gray-500">
                 Total: {formatCurrency(totalCost)} · Due: {formatCurrency(Math.max(0, totalCost - paidAmount))}
               </p>
@@ -291,8 +297,10 @@ export default function PurchasesPage() {
               <Label>{t.common.paid}</Label>
               <Input
                 type="number"
-                value={editPaidAmount}
-                onChange={(e) => setEditPaidAmount(parseFloat(e.target.value) || 0)}
+                min={0}
+                placeholder="0"
+                value={formatOptionalAmount(editPaidAmount)}
+                onChange={(e) => setEditPaidAmount(parseOptionalAmountInput(e.target.value))}
               />
               <p className="mt-1 text-xs text-gray-500">
                 Due after update: {formatCurrency(Math.max(0, Number(editingPurchase.totalCost) - editPaidAmount))}

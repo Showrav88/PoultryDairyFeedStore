@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDateTime, formatOptionalAmount, parseOptionalAmountInput } from "@/lib/utils";
 import {
   formatFullPackageLabel,
   formatSellUnitLabel,
@@ -502,8 +502,10 @@ export default function SellCounterPage() {
               <Label>{t.common.paid}</Label>
               <Input
                 type="number"
-                value={paidAmount}
-                onChange={(e) => setPaidAmount(parseFloat(e.target.value))}
+                min={0}
+                placeholder="0"
+                value={formatOptionalAmount(paidAmount)}
+                onChange={(e) => setPaidAmount(parseOptionalAmountInput(e.target.value))}
               />
             </div>
           </div>
