@@ -7,7 +7,12 @@ import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
+import {
+  formatSellUnitLabel,
+  getCustomUnitOptions,
+  parseCustomSellAmount,
+  type CustomSellUnit,
+} from "@/lib/inventory/sell-units";
 
 interface Product {
   id: string;
@@ -62,6 +67,9 @@ export default function SellCounterPage() {
   const [searchDate, setSearchDate] = useState("");
   const [searchResults, setSearchResults] = useState<Sale[]>([]);
   const [showSearch, setShowSearch] = useState(false);
+  const [useCustomAmount, setUseCustomAmount] = useState(false);
+  const [customAmount, setCustomAmount] = useState(1);
+  const [customUnit, setCustomUnit] = useState<CustomSellUnit>("KG");
 
   const loadProducts = useCallback(() => {
     fetch("/api/products")
@@ -83,15 +91,32 @@ export default function SellCounterPage() {
     setSellUnit(p.allowedSellUnits[0] ?? 250);
     setSellPrice(p.sellPrice);
     setUnitCount(1);
+    setUseCustomAmount(false);
+    setCustomAmount(1);
+    const units = getCustomUnitOptions(p.weightUnit);
+    setCustomUnit(units[0]?.value ?? "KG");
+  };
+
+  const effectiveSellUnit = () => {
+    if (!selectedProduct) return sellUnit;
+    if (useCustomAmount) {
+      return parseCustomSellAmount(customAmount, customUnit);
+    }
+    return sellUnit;
   };
 
   const addToCart = () => {
     if (!selectedProduct) return;
+    const qty = effectiveSellUnit();
+    if (qty <= 0) {
+      alert("Enter a valid sell quantity");
+      return;
+    }
     const item: CartItem = {
       productId: selectedProduct.id,
       productName: selectedProduct.name,
-      quantityInSmallestUnit: sellUnit,
-      sellUnitLabel: formatSellUnitLabel(sellUnit, selectedProduct.weightUnit, selectedProduct.basePackageSize),
+      quantityInSmallestUnit: qty,
+      sellUnitLabel: formatSellUnitLabel(qty, selectedProduct.weightUnit, selectedProduct.basePackageSize),
       pricePerUnit: sellPrice,
       unitCount,
     };
@@ -242,23 +267,81 @@ export default function SellCounterPage() {
               <button onClick={() => setSelectedProduct(null)}><X size={18} /></button>
             </div>
             <p className="text-xs text-gray-500 mb-3">
-              Stock: {selectedProduct.inventory.formattedTotal} · {selectedProduct.inventory.closedBags} bags
+              Stock: {selectedProduct.inventory.formattedTotal}
+              {(selectedProduct.weightUnit === "BAG" || selectedProduct.weightUnit === "GRAM" || selectedProduct.weightUnit === "KG") && (
+                <> · {selectedProduct.inventory.closedBags} sealed bags</>
+              )}
             </p>
+            {selectedProduct.inventory.formattedOpenBag && (
+              <p className="mb-3 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-700 dark:bg-orange-950/30">
+                Open bag has: <strong>{selectedProduct.inventory.formattedOpenBag}</strong> — khucra sells from this first, then opens a new bag automatically.
+              </p>
+            )}
 
-            <Label className="mb-1 block">{t.sell.khucra} / {t.sell.fullBag}</Label>
-            <div className="mb-3 flex flex-wrap gap-2">
-              {selectedProduct.allowedSellUnits.map((u) => (
-                <button
-                  key={u}
-                  onClick={() => setSellUnit(u)}
-                  className={`min-h-11 rounded-lg border px-3 py-2 text-sm ${
-                    sellUnit === u ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"
-                  }`}
-                >
-                  {formatSellUnitLabel(u, selectedProduct.weightUnit, selectedProduct.basePackageSize)}
-                </button>
-              ))}
+            <div className="mb-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setUseCustomAmount(false)}
+                className={`rounded-lg px-3 py-1 text-xs border ${!useCustomAmount ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"}`}
+              >
+                Quick buttons
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseCustomAmount(true)}
+                className={`rounded-lg px-3 py-1 text-xs border ${useCustomAmount ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"}`}
+              >
+                Custom amount
+              </button>
             </div>
+
+            {!useCustomAmount ? (
+              <>
+                <Label className="mb-1 block">{t.sell.khucra} / {t.sell.fullBag}</Label>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {selectedProduct.allowedSellUnits.map((u) => (
+                    <button
+                      key={u}
+                      onClick={() => setSellUnit(u)}
+                      className={`min-h-11 rounded-lg border px-3 py-2 text-sm ${
+                        sellUnit === u ? "bg-emerald-600 text-white border-emerald-600" : "border-gray-300"
+                      }`}
+                    >
+                      {formatSellUnitLabel(u, selectedProduct.weightUnit, selectedProduct.basePackageSize)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mb-3 grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Custom quantity</Label>
+                  <Input
+                    type="number"
+                    min={0.001}
+                    step="any"
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(parseFloat(e.target.value) || 0)}
+                    placeholder="e.g. 5 for 5 kg"
+                  />
+                </div>
+                <div>
+                  <Label>Unit</Label>
+                  <select
+                    className="flex h-10 w-full rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-600 dark:bg-gray-900"
+                    value={customUnit}
+                    onChange={(e) => setCustomUnit(e.target.value as CustomSellUnit)}
+                  >
+                    {getCustomUnitOptions(selectedProduct.weightUnit).map((u) => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="col-span-2 text-xs text-emerald-700">
+                  Will deduct: {formatSellUnitLabel(effectiveSellUnit(), selectedProduct.weightUnit, selectedProduct.basePackageSize)} per item
+                </p>
+              </div>
+            )}
 
             <div className="mb-3 grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
               <div>

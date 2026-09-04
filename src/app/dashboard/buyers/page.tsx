@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -53,11 +53,29 @@ export default function BuyersPage() {
         setEditingId(null);
         setForm({ name: "", phone: "", address: "" });
         load(search);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed");
       } finally {
         setLoading(false);
         close();
       }
     }, { message: editingId ? `Update buyer "${form.name}"?` : `Add buyer "${form.name}"?` });
+  };
+
+  const handleDelete = (b: Buyer) => {
+    confirm(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/buyers/${b.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error((await res.json()).error);
+        load(search);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Delete failed");
+      } finally {
+        setLoading(false);
+        close();
+      }
+    }, { message: `Delete buyer "${b.name}"? (Only if no purchases exist)` });
   };
 
   return (
@@ -93,7 +111,7 @@ export default function BuyersPage() {
               <th className="px-4 py-3 text-left">{t.common.name}</th>
               <th className="px-4 py-3 text-left">{t.common.phone}</th>
               <th className="px-4 py-3 text-left">{t.common.address}</th>
-              <th className="px-4 py-3 text-left">{t.common.edit}</th>
+              <th className="px-4 py-3 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -103,7 +121,14 @@ export default function BuyersPage() {
                 <td className="px-4 py-3">{b.phone}</td>
                 <td className="px-4 py-3">{b.address || "—"}</td>
                 <td className="px-4 py-3">
-                  <Button size="sm" variant="outline" onClick={() => openEdit(b)}><Pencil size={14} /></Button>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => openEdit(b)} title={t.common.edit}>
+                      <Pencil size={14} />
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleDelete(b)} title={t.common.delete}>
+                      <Trash2 size={14} className="text-red-500" />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}

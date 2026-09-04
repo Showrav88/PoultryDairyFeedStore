@@ -125,3 +125,41 @@ export function formatSellUnitLabel(amount: number, weightUnit: string, basePack
   }
   return `${amount}g`;
 }
+
+export type CustomSellUnit = "GRAM" | "KG" | "PIECE" | "ML" | "LITER";
+
+export function getCustomUnitOptions(weightUnit: string): { value: CustomSellUnit; label: string }[] {
+  if (weightUnit === "PIECE" || weightUnit === "GENERIC") {
+    return [{ value: "PIECE", label: "Pieces" }];
+  }
+  if (weightUnit === "ML" || weightUnit === "LITER") {
+    return [
+      { value: "ML", label: "ml" },
+      { value: "LITER", label: "Liter" },
+    ];
+  }
+  return [
+    { value: "GRAM", label: "Gram (g)" },
+    { value: "KG", label: "Kilogram (kg)" },
+  ];
+}
+
+/** Convert user-entered custom amount to smallest unit (grams/ml/pieces) */
+export function parseCustomSellAmount(
+  amount: number,
+  unit: CustomSellUnit
+): number {
+  if (amount <= 0) return 0;
+  switch (unit) {
+    case "KG":
+      return Math.round(amount * 1000);
+    case "LITER":
+      return Math.round(amount * 1000);
+    case "GRAM":
+    case "ML":
+    case "PIECE":
+      return Math.round(amount);
+    default:
+      return Math.round(amount);
+  }
+}
