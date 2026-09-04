@@ -62,6 +62,10 @@ sudo -u newproject -H git -C "$APP_DIR" fetch origin "$BRANCH"
 sudo -u newproject -H git -C "$APP_DIR" checkout "$BRANCH"
 sudo -u newproject -H git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
 
+DEPLOYING_SHA="$(sudo -u newproject git -C "$APP_DIR" rev-parse --short HEAD)"
+echo "$DEPLOYING_SHA" | sudo -u newproject tee "$APP_DIR/.deploy-sha" >/dev/null
+echo "Building commit $DEPLOYING_SHA ..."
+
 sudo -u newproject -H bash -lc "
   set -Eeuo pipefail
   cd '$APP_DIR'

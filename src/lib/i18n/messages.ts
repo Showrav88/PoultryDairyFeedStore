@@ -127,6 +127,11 @@ export const messages = {
       stockAfterAdd: "Stock after adding to cart",
       searchSale: "Search by name, phone or date",
       bagsOpened: "bag(s) opened from inventory",
+      pricingNotice: "Enter sell price every time — product suggested price is a hint only (not auto-filled).",
+      tapProductHint: "Tap a product to enter price, see suggested price, and estimated profit.",
+      sellPriceNow: "Sell price (enter now)",
+      noAvgCostYet: "No buy cost yet — add a Purchase first to see profit",
+      notAutoFilled: "not auto-filled",
     },
     wallet: {
       title: "Wallet",
@@ -292,6 +297,11 @@ export const messages = {
       stockAfterAdd: "কার্টে যোগ করার পর স্টক",
       searchSale: "নাম, ফোন বা তারিখ দিয়ে খুঁজুন",
       bagsOpened: "ব্যাগ ইনভেন্টরি থেকে খোলা হয়েছে",
+      pricingNotice: "প্রতিবার বিক্রয় মূল্য লিখুন — পণ্যের প্রস্তাবিত মূল্য শুধু স্মারক (স্বয়ংক্রিয় নয়)।",
+      tapProductHint: "পণ্যে ট্যাপ করুন — মূল্য লিখুন, প্রস্তাবিত মূল্য ও আনুমানিক লাভ দেখুন।",
+      sellPriceNow: "বিক্রয় মূল্য (এখন লিখুন)",
+      noAvgCostYet: "ক্রয় মূল্য নেই — লাভ দেখতে প্রথমে ক্রয় যোগ করুন",
+      notAutoFilled: "স্বয়ংক্রিয় নয়",
     },
     wallet: {
       title: "ওয়ালেট",
