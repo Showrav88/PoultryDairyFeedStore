@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
-import { formatCurrency, formatDateTime, formatOptionalAmount, parseOptionalAmountInput } from "@/lib/utils";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 interface Buyer { id: string; name: string; phone: string; }
 interface Product { id: string; name: string; productId: string; }
@@ -202,12 +202,11 @@ export default function PurchasesPage() {
             </div>
             <div>
               <Label>{t.common.paid}</Label>
-              <Input
-                type="number"
+              <NumberInput
                 min={0}
-                placeholder="0"
-                value={formatOptionalAmount(paidAmount)}
-                onChange={(e) => setPaidAmount(parseOptionalAmountInput(e.target.value))}
+                placeholder={t.common.enterAmount}
+                value={paidAmount}
+                onChange={setPaidAmount}
               />
               <p className="mt-1 text-xs text-gray-500">
                 Total: {formatCurrency(totalCost)} · Due: {formatCurrency(Math.max(0, totalCost - paidAmount))}
@@ -233,25 +232,20 @@ export default function PurchasesPage() {
                 </div>
                 <div>
                   <Label>Qty (bags) *</Label>
-                  <Input
-                    type="number"
-                    min={1}
+                  <NumberInput
                     required
-                    placeholder="Enter qty"
-                    value={formatOptionalAmount(item.quantity)}
-                    onChange={(e) => updateItem(idx, "quantity", parseOptionalAmountInput(e.target.value))}
+                    placeholder={t.common.enterQty}
+                    value={item.quantity}
+                    onChange={(v) => updateItem(idx, "quantity", v)}
                   />
                 </div>
                 <div>
                   <Label>{t.purchases.costPerUnit} *</Label>
-                  <Input
-                    type="number"
-                    min={0.01}
-                    step="any"
+                  <NumberInput
                     required
-                    placeholder="Enter unit price"
-                    value={formatOptionalAmount(item.costPricePerUnit)}
-                    onChange={(e) => updateItem(idx, "costPricePerUnit", parseOptionalAmountInput(e.target.value))}
+                    placeholder={t.common.enterPrice}
+                    value={item.costPricePerUnit}
+                    onChange={(v) => updateItem(idx, "costPricePerUnit", v)}
                   />
                 </div>
                 <div className="flex min-h-10 items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
@@ -323,12 +317,10 @@ export default function PurchasesPage() {
             <p className="text-sm">Total: {formatCurrency(editingPurchase.totalCost)}</p>
             <div className="mt-4">
               <Label>{t.common.paid}</Label>
-              <Input
-                type="number"
-                min={0}
-                placeholder="0"
-                value={formatOptionalAmount(editPaidAmount)}
-                onChange={(e) => setEditPaidAmount(parseOptionalAmountInput(e.target.value))}
+              <NumberInput
+                placeholder={t.common.enterAmount}
+                value={editPaidAmount}
+                onChange={setEditPaidAmount}
               />
               <p className="mt-1 text-xs text-gray-500">
                 Due after update: {formatCurrency(Math.max(0, Number(editingPurchase.totalCost) - editPaidAmount))}

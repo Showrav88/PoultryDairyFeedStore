@@ -31,11 +31,13 @@ export function formatDateTime(date: Date | string, locale = "en"): string {
   });
 }
 
-/** Empty input when amount is 0 — avoids showing 0 in payment fields */
-export function formatOptionalAmount(value: number): string {
-  return value === 0 ? "" : String(value);
+/** Show blank field when value is 0 — empty saves as 0 */
+export function formatOptionalAmount(value: number | null | undefined): string {
+  if (value == null || value === 0) return "";
+  return String(value);
 }
 
+/** Parse number input: empty or invalid → 0 (never null/NaN) */
 export function parseOptionalAmountInput(raw: string): number {
   const trimmed = raw.trim();
   if (!trimmed) return 0;

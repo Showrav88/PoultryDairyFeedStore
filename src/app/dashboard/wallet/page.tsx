@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
@@ -102,7 +102,11 @@ export default function WalletPage() {
         <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6 md:grid-cols-2">
           <div>
             <Label>{t.common.amount}</Label>
-            <Input type="number" value={amount} onChange={(e) => setAmount(parseFloat(e.target.value))} />
+            <NumberInput
+              placeholder={t.common.enterAmount}
+              value={amount}
+              onChange={setAmount}
+            />
           </div>
           {txType === "EXPENSE" && (
             <div>

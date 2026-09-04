@@ -58,6 +58,10 @@ export const messages = {
       due: "Due",
       partial: "Partial",
       optional: "optional",
+      enterAmount: "Enter amount",
+      enterQty: "Enter quantity",
+      enterPrice: "Enter price",
+      enterSize: "Enter size",
     },
     products: {
       title: "Product Catalogue",
@@ -229,6 +233,10 @@ export const messages = {
       due: "বাকি",
       partial: "আংশিক",
       optional: "ঐচ্ছিক",
+      enterAmount: "টাকার পরিমাণ লিখুন",
+      enterQty: "পরিমাণ লিখুন",
+      enterPrice: "মূল্য লিখুন",
+      enterSize: "সাইজ লিখুন",
     },
     products: {
       title: "পণ্য তালিকা",
