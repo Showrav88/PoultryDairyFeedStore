@@ -143,9 +143,12 @@ write_status "building" "$DEPLOYING_SHA" "Installing dependencies, migrating DB,
 
 # Stop before overwriting .next — building while next start is running causes 500 errors.
 systemctl stop newproject-api.service 2>/dev/null || true
+sleep 2
 
 sudo -u "${APP_USER}" -H bash -lc "
   set -Eeuo pipefail
+  export DEPLOY_STATUS_FILE='${STATUS_FILE}'
+  export DEPLOYING_SHA='${DEPLOYING_SHA}'
   # shellcheck disable=SC1091
   source '${APP_DIR}/deploy/build-app.sh'
   deploy_build_app '${APP_DIR}'
