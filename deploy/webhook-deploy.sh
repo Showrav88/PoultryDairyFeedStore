@@ -27,6 +27,39 @@ fail() {
   exit 1
 }
 
+deploy_is_live() {
+  # shellcheck disable=SC1091
+  source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
+  if type newproject_deploy_process_running >/dev/null 2>&1; then
+    newproject_deploy_process_running && return 0
+  fi
+  pgrep -af '/usr/local/sbin/deploy-newproject|deploy/deploy-newproject\.sh|trigger-newproject-deploy' \
+    >/dev/null 2>&1
+}
+
+launch_root_deploy() {
+  local cmd="$1"
+  if ! sudo -n true 2>/dev/null; then
+    echo "sudo -n true failed for $(whoami) — passwordless sudo not configured"
+    return 1
+  fi
+  echo "Launching: sudo -n $cmd"
+  sudo -n "$cmd" >>"$LOG_FILE" 2>&1 &
+  local bg=$!
+  for _ in 1 2 3 4 5 6; do
+    sleep 1
+    if deploy_is_live; then
+      return 0
+    fi
+    if ! kill -0 "$bg" 2>/dev/null; then
+      wait "$bg" 2>/dev/null || true
+      echo "Launch process $bg exited before deploy started"
+      return 1
+    fi
+  done
+  deploy_is_live
+}
+
 echo "=== webhook-deploy $(date -Is) TARGET_SHA=${TARGET_SHA:-unknown} user=$(whoami) pid=$$ ==="
 
 CURRENT_SHA="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"
@@ -38,30 +71,24 @@ if [[ -n "${TARGET_SHA:-}" && -n "$CURRENT_SHA" && "$CURRENT_SHA" == "$TARGET_SH
   fi
 fi
 
-# shellcheck disable=SC1091
-source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
-if type newproject_deploy_process_running >/dev/null 2>&1 && newproject_deploy_process_running; then
+if deploy_is_live; then
   write_status "running" "${TARGET_SHA:-}" "Deploy already in progress"
   echo "Deploy process already active — skip duplicate webhook"
   exit 0
 fi
 
-write_status "started" "${TARGET_SHA:-}" "Webhook deploy starting"
 rm -f "$APP_LOCK"
 
-# Prefer installed trigger (exact sudoers match, resets stuck systemd unit).
-if [[ -x "$TRIGGER_DEPLOY" ]]; then
-  if sudo -n "$TRIGGER_DEPLOY" </dev/null >>"$LOG_FILE" 2>&1 & then
-    echo "Started via $TRIGGER_DEPLOY (pid $!)"
-    exit 0
-  fi
-  echo "sudo $TRIGGER_DEPLOY failed (check /etc/sudoers.d/newproject-deploy)"
-fi
-
-# Fallback: direct root deploy (sudoers must allow SBIN_DEPLOY exactly).
-if sudo -n "$SBIN_DEPLOY" </dev/null >>"$LOG_FILE" 2>&1 & then
-  echo "Started direct root deploy (pid $!)"
+if [[ -x "$TRIGGER_DEPLOY" ]] && launch_root_deploy "$TRIGGER_DEPLOY"; then
+  write_status "started" "${TARGET_SHA:-}" "Webhook deploy started via trigger"
+  echo "Deploy started via $TRIGGER_DEPLOY"
   exit 0
 fi
 
-fail "Webhook cannot start deploy. On VPS run once as root: sudo bash ${APP_DIR}/deploy/setup-github-actions-deploy.sh"
+if [[ -x "$SBIN_DEPLOY" ]] && launch_root_deploy "$SBIN_DEPLOY"; then
+  write_status "started" "${TARGET_SHA:-}" "Webhook deploy started via deploy-newproject"
+  echo "Deploy started via $SBIN_DEPLOY"
+  exit 0
+fi
+
+fail "Webhook cannot start deploy. On VPS run once as root: sudo bash ${APP_DIR}/deploy/setup-github-actions-deploy.sh (or sudo /usr/local/sbin/deploy-newproject after git sync)"
