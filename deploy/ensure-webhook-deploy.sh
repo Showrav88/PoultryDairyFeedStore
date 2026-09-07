@@ -59,9 +59,18 @@ EOF
 chmod 440 "$SUDOERS_FILE"
 visudo -cf "$SUDOERS_FILE"
 
-if ! sudo -u "$DEPLOY_USER" sudo -n true 2>/dev/null; then
-  echo "ERROR: ${DEPLOY_USER} still cannot passwordless sudo deploy commands."
+# Verify allowed commands (sudo -n true is NOT in sudoers — that was a false failure).
+verify_webhook_sudo() {
+  local list
+  list="$(sudo -u "$DEPLOY_USER" sudo -n -l 2>/dev/null || true)"
+  echo "$list" | grep -Fq "$TRIGGER_DEPLOY" && echo "$list" | grep -Fq "$DEPLOY_CMD"
+}
+
+if ! verify_webhook_sudo; then
+  echo "ERROR: ${DEPLOY_USER} cannot passwordless sudo deploy commands."
   echo "Check ${SUDOERS_FILE}"
+  echo "Debug: sudo -u ${DEPLOY_USER} sudo -n -l"
+  sudo -u "$DEPLOY_USER" sudo -n -l 2>&1 || true
   exit 1
 fi
 

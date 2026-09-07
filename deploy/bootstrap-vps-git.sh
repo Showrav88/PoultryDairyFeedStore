@@ -38,9 +38,15 @@ install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" /usr/local/sbin/f
 install -m 755 "${APP_DIR}/deploy/trigger-newproject-deploy.sh" /usr/local/sbin/trigger-newproject-deploy 2>/dev/null || true
 
 if [[ -f "${APP_DIR}/deploy/ensure-webhook-deploy.sh" ]]; then
-  bash "${APP_DIR}/deploy/ensure-webhook-deploy.sh"
+  bash "${APP_DIR}/deploy/ensure-webhook-deploy.sh" || {
+    echo "WARNING: ensure-webhook-deploy failed — continuing bootstrap deploy as root"
+  }
 else
   echo "WARNING: ensure-webhook-deploy.sh missing — git pull may be incomplete"
+fi
+
+if [[ -f "${APP_DIR}/deploy/unlock-deploy.sh" ]]; then
+  bash "${APP_DIR}/deploy/unlock-deploy.sh" --force 2>/dev/null || true
 fi
 
 if [[ -f "${APP_DIR}/scripts/hostinger/install-auto-deploy-cron.sh" ]]; then

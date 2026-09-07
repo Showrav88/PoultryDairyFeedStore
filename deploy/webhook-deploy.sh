@@ -39,8 +39,8 @@ deploy_is_live() {
 
 launch_root_deploy() {
   local cmd="$1"
-  if ! sudo -n true 2>/dev/null; then
-    echo "sudo -n true failed for $(whoami) — passwordless sudo not configured"
+  if ! sudo -n -l 2>/dev/null | grep -Fq "$cmd"; then
+    echo "sudo -n not allowed for $cmd (check /etc/sudoers.d/newproject-deploy)"
     return 1
   fi
   echo "Launching: sudo -n $cmd"
