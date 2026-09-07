@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { collectFarmerPayment } from "@/lib/farmers/payments";
+import { collectCustomerPayment } from "@/lib/customers/payments";
 
 const updateSchema = z
   .object({
@@ -29,12 +30,9 @@ export async function PATCH(
 
     const existing = await prisma.sale.findFirst({
       where: { id, shopId: session.shopId },
-      include: { farmer: true },
+      include: { farmer: true, customer: true },
     });
     if (!existing) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
-    if (!existing.farmerId || !existing.farmer) {
-      return NextResponse.json({ error: "This sale is not linked to a farmer" }, { status: 400 });
-    }
 
     const oldPaid = Number(existing.paidAmount);
     let additional = data.additionalAmount;
@@ -46,21 +44,43 @@ export async function PATCH(
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const paymentResult = await collectFarmerPayment(tx, {
-        shopId: session.shopId,
-        farmerId: existing.farmerId!,
-        farmerName: existing.farmer!.name,
-        amount: additional!,
-        note: `Sale #${id.slice(-6)} payment`,
-        targetSaleId: id,
-      });
+      if (existing.farmerId && existing.farmer) {
+        const paymentResult = await collectFarmerPayment(tx, {
+          shopId: session.shopId,
+          farmerId: existing.farmerId,
+          farmerName: existing.farmer.name,
+          amount: additional!,
+          note: `Sale #${id.slice(-6)} payment`,
+          targetSaleId: id,
+        });
 
-      const sale = await tx.sale.findUnique({
-        where: { id },
-        include: { items: { include: { product: true } } },
-      });
+        const sale = await tx.sale.findUnique({
+          where: { id },
+          include: { items: { include: { product: true } } },
+        });
 
-      return { sale, paymentResult };
+        return { sale, paymentResult };
+      }
+
+      if (existing.customerId && existing.customer) {
+        const paymentResult = await collectCustomerPayment(tx, {
+          shopId: session.shopId,
+          customerId: existing.customerId,
+          customerName: existing.customer.name,
+          amount: additional!,
+          note: `Sale #${id.slice(-6)} payment`,
+          targetSaleId: id,
+        });
+
+        const sale = await tx.sale.findUnique({
+          where: { id },
+          include: { items: { include: { product: true } } },
+        });
+
+        return { sale, paymentResult };
+      }
+
+      throw new Error("This sale is not linked to a farmer or saved customer");
     });
 
     await logAudit(
