@@ -233,6 +233,17 @@ Or run the helper:
 sudo bash /var/www/NEWPROJECT/deploy/setup-github-actions-deploy.sh
 ```
 
+**If GitHub and VPS secrets do not match** (deploy returns 401, or you never set
+`.env`), run this on the VPS. It writes the secret to `.env`, restarts the app,
+and prints the exact value to paste into GitHub:
+
+```bash
+sudo bash /var/www/NEWPROJECT/deploy/sync-webhook-secret.sh --rotate
+```
+
+Then in GitHub → **Settings → Secrets and variables → Actions**, update
+`DEPLOY_WEBHOOK_SECRET` with the printed value (no quotes).
+
 Deploy the webhook endpoint once manually:
 
 ```bash
