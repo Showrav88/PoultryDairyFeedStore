@@ -296,6 +296,15 @@ sudo /usr/local/sbin/deploy-newproject
 If git reports **local changes would be overwritten by merge**, reset the VPS checkout to GitHub (`.env` is kept):
 
 ```bash
+sudo bash /var/www/NEWPROJECT/deploy/bootstrap-vps-git.sh
+sudo bash /var/www/NEWPROJECT/deploy/setup-github-actions-deploy.sh
+sudo bash /var/www/NEWPROJECT/deploy/unlock-deploy.sh --force
+sudo /usr/local/sbin/deploy-newproject
+```
+
+Or manually:
+
+```bash
 cd /var/www/NEWPROJECT
 sudo git fetch origin main
 sudo git reset --hard origin/main

@@ -30,14 +30,20 @@ fix_app_ownership() {
 }
 
 git_pull_latest() {
+  if [[ "${NEWPROJECT_GIT_SYNCED:-}" == "1" ]]; then
+    echo "Git already synced by /usr/local/sbin/deploy-newproject"
+    return 0
+  fi
+
   echo "Deploying newproject from origin/$BRANCH..."
   write_status "pulling" "" "Fetching latest code"
 
   fix_app_ownership
 
-  SYNC_SCRIPT="${APP_DIR}/deploy/sync-to-origin.sh"
-  if [[ -f "$SYNC_SCRIPT" ]]; then
-    bash "$SYNC_SCRIPT" "$APP_DIR" "$BRANCH"
+  if [[ -x /usr/local/sbin/sync-newproject-origin ]]; then
+    /usr/local/sbin/sync-newproject-origin "$APP_DIR" "$BRANCH"
+  elif [[ -f "${APP_DIR}/deploy/sync-to-origin.sh" ]]; then
+    bash "${APP_DIR}/deploy/sync-to-origin.sh" "$APP_DIR" "$BRANCH"
   elif [[ "$(id -u)" -eq 0 ]]; then
     git -C "$APP_DIR" fetch origin "$BRANCH"
     git -C "$APP_DIR" checkout -f "$BRANCH"
@@ -67,9 +73,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Keep system deploy command in sync with repo (root only).
+# Keep system deploy commands in sync with repo (root only).
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/sbin-deploy-newproject" ]]; then
   install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$SBIN_CMD"
+fi
+if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/sbin-sync-newproject-origin" ]]; then
+  install -m 755 "${APP_DIR}/deploy/sbin-sync-newproject-origin" /usr/local/sbin/sync-newproject-origin
 fi
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/fix-newproject-ownership.sh" ]]; then
   install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" /usr/local/sbin/fix-newproject-ownership

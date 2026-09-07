@@ -20,15 +20,20 @@ if ! id "$DEPLOY_USER" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -x "$DEPLOY_CMD" ]] || ! grep -q 'deploy/deploy-newproject.sh' "$DEPLOY_CMD" 2>/dev/null; then
+if [[ ! -x "$DEPLOY_CMD" ]]; then
   echo "Installing deploy wrapper at $DEPLOY_CMD ..."
   install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$DEPLOY_CMD"
 fi
 
 FIX_OWNERSHIP="/usr/local/sbin/fix-newproject-ownership"
+SYNC_ORIGIN="/usr/local/sbin/sync-newproject-origin"
+echo "Installing system deploy helpers ..."
+install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$DEPLOY_CMD"
+install -m 755 "${APP_DIR}/deploy/sbin-sync-newproject-origin" "$SYNC_ORIGIN"
 install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" "$FIX_OWNERSHIP"
 
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: ${DEPLOY_CMD}" > "$SUDOERS_FILE"
+echo "${DEPLOY_USER} ALL=(root) NOPASSWD: ${SYNC_ORIGIN}" >> "$SUDOERS_FILE"
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: ${FIX_OWNERSHIP}" >> "$SUDOERS_FILE"
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart newproject-api.service" >> "$SUDOERS_FILE"
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart newproject-api.service" >> "$SUDOERS_FILE"
