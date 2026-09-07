@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, ChevronRight, Tractor } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronRight, Tractor, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { FarmIssueHistoryList } from "@/components/farms/issue-history-list";
 import { useI18n } from "@/lib/i18n/context";
 import { ANIMAL_TYPE_LABELS } from "@/lib/farms/wallet";
+import { type FarmIssueRow } from "@/lib/farms/issue-display";
+import { cn } from "@/lib/utils";
 
 const ANIMAL_TYPES = ["POULTRY", "COW", "FISH", "DUCK", "GOAT", "SHEEP", "RABBIT", "OTHER"] as const;
+type PageView = "farms" | "history";
 
 interface Farm {
   id: string;
@@ -24,6 +28,8 @@ export default function FarmsPage() {
   const { t, locale } = useI18n();
   const { state: confirmState, confirm, close } = useConfirmDialog();
   const [farms, setFarms] = useState<Farm[]>([]);
+  const [view, setView] = useState<PageView>("farms");
+  const [issueHistory, setIssueHistory] = useState<FarmIssueRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -41,6 +47,14 @@ export default function FarmsPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (view === "history") {
+      fetch("/api/farms/issues/history")
+        .then((r) => r.json())
+        .then((d) => setIssueHistory(d.issues ?? []));
+    }
+  }, [view]);
 
   const animalLabel = (type: string) => {
     const labels = ANIMAL_TYPE_LABELS[type];
@@ -116,19 +130,51 @@ export default function FarmsPage() {
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold sm:text-2xl">{t.farms.title}</h1>
-        <Button
-          className="min-h-11 shrink-0"
-          onClick={() => {
-            setEditingId(null);
-            setForm({ name: "", animalType: "POULTRY", location: "", notes: "" });
-            setShowForm(!showForm);
-          }}
-        >
-          <Plus size={18} /> {t.farms.addFarm}
-        </Button>
+        {view === "farms" && (
+          <Button
+            className="min-h-11 shrink-0"
+            onClick={() => {
+              setEditingId(null);
+              setForm({ name: "", animalType: "POULTRY", location: "", notes: "" });
+              setShowForm(!showForm);
+            }}
+          >
+            <Plus size={18} /> {t.farms.addFarm}
+          </Button>
+        )}
       </div>
 
-      {showForm && (
+      <div className="mb-4 flex flex-wrap gap-1">
+        {(
+          [
+            { key: "farms" as const, label: t.farms.farmsTab, icon: Tractor },
+            { key: "history" as const, label: t.farms.history, icon: History },
+          ] as const
+        ).map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              view === key
+                ? "bg-emerald-600 text-white"
+                : "bg-[var(--border)]/30 text-[var(--muted)] hover:bg-[var(--border)]/50"
+            )}
+          >
+            <Icon size={16} />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "history" && (
+        <div>
+          <p className="mb-4 text-sm text-[var(--info-text)]">{t.farms.historyHelp}</p>
+          <FarmIssueHistoryList issues={issueHistory} showFarm />
+        </div>
+      )}
+
+      {view === "farms" && showForm && (
         <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6 md:grid-cols-2">
           <div className="md:col-span-2 font-semibold">
             {editingId ? t.farms.editFarm : t.farms.addFarm}
@@ -180,6 +226,7 @@ export default function FarmsPage() {
         </div>
       )}
 
+      {view === "farms" && (
       <div className="space-y-2">
         {farms.map((f) => (
           <div
@@ -222,6 +269,7 @@ export default function FarmsPage() {
           <p className="py-8 text-center text-gray-500">{t.common.noData}</p>
         )}
       </div>
+      )}
 
       <ConfirmDialog
         open={confirmState.open}
