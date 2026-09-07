@@ -110,24 +110,15 @@ ensure_app_ownership || true
 sync_from_origin
 
 DEPLOYING_SHA="$(git rev-parse --short HEAD)"
-echo "$DEPLOYING_SHA" > "$APP_DIR/.deploy-sha"
 echo "Building commit $DEPLOYING_SHA ..."
-write_status "building" "$DEPLOYING_SHA" "Installing dependencies and building"
+write_status "building" "$DEPLOYING_SHA" "Installing dependencies, migrating DB, and building"
 
 # Stop before overwriting .next — building while next start is running causes 500 errors.
 stop_service
 
-if [[ -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
-fi
-
-# Build needs devDependencies (typescript, etc.) even when NODE_ENV=production.
-npm ci --include=dev
-npm run build
-npx prisma migrate deploy
+# shellcheck disable=SC1091
+source "${APP_DIR}/deploy/build-app.sh"
+deploy_build_app "$APP_DIR"
 
 write_status "restarting" "$DEPLOYING_SHA" "Starting application"
 

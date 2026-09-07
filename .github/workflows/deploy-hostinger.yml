@@ -71,8 +71,26 @@ jobs:
           echo "Waiting for deploy to finish (target sha ${short_github_sha}) ..."
 
           for attempt in $(seq 1 120); do
-            health_json=$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null || true)
-            status_json=$(curl -fsS --max-time 10 "$STATUS_URL" 2>/dev/null || true)
+            health_curl=$(curl -sS --connect-timeout 5 --max-time 10 -w "\nHTTP_CODE:%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "HTTP_CODE:000")
+            health_body="${health_curl%HTTP_CODE:*}"
+            health_code="${health_curl##*HTTP_CODE:}"
+            health_json=""
+            if [[ "$health_code" == "200" && -n "$health_body" ]]; then
+              health_json="$health_body"
+            fi
+
+            status_curl=$(curl -sS --connect-timeout 5 --max-time 10 -w "\nHTTP_CODE:%{http_code}" "$STATUS_URL" 2>/dev/null || echo "HTTP_CODE:000")
+            status_body="${status_curl%HTTP_CODE:*}"
+            status_code="${status_curl##*HTTP_CODE:}"
+            status_json=""
+            if [[ "$status_code" == "200" && -n "$status_body" ]]; then
+              status_json="$status_body"
+            fi
+
+            app_offline="false"
+            if [[ "$health_code" == "000" || "$health_code" == "502" || "$health_code" == "503" ]]; then
+              app_offline="true"
+            fi
 
             if [[ -n "$health_json" ]]; then
               echo "$health_json"
@@ -84,16 +102,18 @@ jobs:
             fi
 
             status_sha=""
+            status_state=""
             deploy_running="false"
             if [[ -n "$status_json" ]]; then
               status_sha=$(echo "$status_json" | jq -r '.deployStatus.sha // empty')
+              status_state=$(echo "$status_json" | jq -r '.deployStatus.state // empty')
               deploy_running=$(echo "$status_json" | jq -r '.deployRunning // false')
               if [[ "$attempt" == "1" || "$(( attempt % 6 ))" == "0" ]]; then
                 echo "$status_json" | jq -c '{deploySha, deployRunning, deployStatus}' 2>/dev/null || echo "$status_json"
               fi
             fi
 
-            if [[ "$deploy_state" == "failed" ]]; then
+            if [[ "$deploy_state" == "failed" || "$status_state" == "failed" ]]; then
               echo "::error::VPS deploy failed"
               echo "$status_json"
               exit 1
@@ -102,21 +122,22 @@ jobs:
             health_ok=$(echo "$health_json" | jq -r '.status // empty')
 
             if [[ "$deployed_sha" == "$short_github_sha" || "$status_sha" == "$short_github_sha" ]]; then
-              if [[ "$deploy_state" == "ready" || "$deploy_running" == "false" ]]; then
+              if [[ "$deploy_state" == "ready" || "$status_state" == "ready" || ("$deploy_running" == "false" && "$health_ok" == "ok") ]]; then
                 echo "Deploy finished successfully (sha ${deployed_sha:-$status_sha}, attempt ${attempt})."
                 exit 0
               fi
-              # App is already on the target commit and healthy but status file is stale.
               if [[ "$health_ok" == "ok" && "$deploy_state" == "started" && "$attempt" -ge 18 ]]; then
                 echo "Deploy sha matches and app is healthy; stale started status treated as success."
                 exit 0
               fi
             fi
 
-            if [[ "$deploy_running" == "true" || "$deploy_state" =~ ^(started|pulling|building|restarting|running)$ ]]; then
-              echo "Deploy in progress: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-unknown} (attempt ${attempt}/120)"
+            if [[ "$app_offline" == "true" ]]; then
+              echo "App offline during build (expected) — attempt ${attempt}/120, target ${short_github_sha}"
+            elif [[ "$deploy_running" == "true" || "$deploy_state" =~ ^(started|pulling|building|restarting|running)$ || "$status_state" =~ ^(started|pulling|building|restarting|running)$ ]]; then
+              echo "Deploy in progress: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-$status_state} (attempt ${attempt}/120)"
             else
-              echo "Still waiting: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-unknown} (attempt ${attempt}/120)"
+              echo "Still waiting: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-$status_state} (attempt ${attempt}/120)"
             fi
 
             sleep 10

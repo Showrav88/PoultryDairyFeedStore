@@ -26,20 +26,9 @@ journalctl -u newproject-api.service -n 30 --no-pager || true
 echo "3. Rebuild as ${APP_USER} ..."
 sudo -u "${APP_USER}" -H bash -lc "
   set -Eeuo pipefail
-  cd '$APP_DIR'
-  if [[ -f .env ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source .env
-    set +a
-  fi
-  if [[ -z \"\${DATABASE_URL:-}\" ]]; then
-    echo 'ERROR: DATABASE_URL missing in .env'
-    exit 1
-  fi
-  npm ci --include=dev
-  npm run build
-  npx prisma migrate deploy
+  # shellcheck disable=SC1091
+  source '${APP_DIR}/deploy/build-app.sh'
+  deploy_build_app '${APP_DIR}'
 "
 
 echo "4. Restart service ..."

@@ -51,7 +51,11 @@ fi
 if sudo -n "$SBIN_DEPLOY"; then
   echo "Root deploy finished OK"
   FINAL_SHA="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo "${TARGET_SHA:-}")"
-  write_status "ready" "$FINAL_SHA" "Deployment healthy"
+  if curl --fail --silent http://127.0.0.1:5001/api/health >/dev/null 2>&1; then
+    write_status "ready" "$FINAL_SHA" "Deployment healthy"
+  else
+    fail "Root deploy exited 0 but app health check failed"
+  fi
   exit 0
 fi
 
