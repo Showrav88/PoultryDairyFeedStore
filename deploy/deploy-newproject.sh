@@ -139,24 +139,16 @@ git_pull_latest
 DEPLOYING_SHA="$(sudo -u "${APP_USER}" git -C "$APP_DIR" rev-parse --short HEAD)"
 echo "$DEPLOYING_SHA" | sudo -u "${APP_USER}" tee "$APP_DIR/.deploy-sha" >/dev/null
 echo "Building commit $DEPLOYING_SHA ..."
-write_status "building" "$DEPLOYING_SHA" "Installing dependencies and building"
+write_status "building" "$DEPLOYING_SHA" "Installing dependencies, migrating DB, and building"
 
 # Stop before overwriting .next — building while next start is running causes 500 errors.
 systemctl stop newproject-api.service 2>/dev/null || true
 
 sudo -u "${APP_USER}" -H bash -lc "
   set -Eeuo pipefail
-  cd '$APP_DIR'
-  if [[ -f .env ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source .env
-    set +a
-  fi
-  # Build needs devDependencies (typescript, etc.) even when NODE_ENV=production.
-  npm ci --include=dev
-  npm run build
-  npx prisma migrate deploy
+  # shellcheck disable=SC1091
+  source '${APP_DIR}/deploy/build-app.sh'
+  deploy_build_app '${APP_DIR}'
 "
 
 write_status "restarting" "$DEPLOYING_SHA" "Starting application service"
