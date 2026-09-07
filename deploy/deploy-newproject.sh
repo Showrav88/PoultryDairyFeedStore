@@ -87,6 +87,9 @@ if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/newproject-deploy.service" ]]; t
   install -m 644 "${APP_DIR}/deploy/newproject-deploy.service" /etc/systemd/system/newproject-deploy.service
   systemctl daemon-reload 2>/dev/null || true
 fi
+if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/trigger-newproject-deploy.sh" ]]; then
+  install -m 755 "${APP_DIR}/deploy/trigger-newproject-deploy.sh" /usr/local/sbin/trigger-newproject-deploy
+fi
 
 if [[ -f "$PID_FILE" ]]; then
   OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"

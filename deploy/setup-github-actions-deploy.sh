@@ -9,6 +9,7 @@ APP_DIR="/var/www/NEWPROJECT"
 DEPLOY_CMD="/usr/local/sbin/deploy-newproject"
 SYNC_ORIGIN="/usr/local/sbin/sync-newproject-origin"
 FIX_OWNERSHIP="/usr/local/sbin/fix-newproject-ownership"
+TRIGGER_DEPLOY="/usr/local/sbin/trigger-newproject-deploy"
 DEPLOY_UNIT="newproject-deploy.service"
 SUDOERS_FILE="/etc/sudoers.d/newproject-deploy"
 ENV_FILE="${APP_DIR}/.env"
@@ -27,6 +28,7 @@ echo "Installing system deploy helpers ..."
 install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$DEPLOY_CMD"
 install -m 755 "${APP_DIR}/deploy/sbin-sync-newproject-origin" "$SYNC_ORIGIN"
 install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" "$FIX_OWNERSHIP"
+install -m 755 "${APP_DIR}/deploy/trigger-newproject-deploy.sh" "$TRIGGER_DEPLOY"
 
 echo "Installing systemd deploy unit ..."
 install -m 644 "${APP_DIR}/deploy/newproject-deploy.service" "/etc/systemd/system/${DEPLOY_UNIT}"
@@ -36,6 +38,7 @@ systemctl enable "$DEPLOY_UNIT" 2>/dev/null || true
 cat > "$SUDOERS_FILE" <<EOF
 # Webhook auto-deploy (user ${DEPLOY_USER} triggers via /api/deploy)
 ${DEPLOY_USER} ALL=(root) NOPASSWD: ${DEPLOY_CMD}
+${DEPLOY_USER} ALL=(root) NOPASSWD: ${TRIGGER_DEPLOY}
 ${DEPLOY_USER} ALL=(root) NOPASSWD: ${SYNC_ORIGIN}
 ${DEPLOY_USER} ALL=(root) NOPASSWD: ${FIX_OWNERSHIP}
 ${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl start ${DEPLOY_UNIT}
@@ -87,7 +90,7 @@ ${DEPLOY_SECRET}
 VPS_DEPLOY_URL
 ${DEPLOY_URL}
 
-Webhook starts: systemctl start ${DEPLOY_UNIT}
+Webhook starts: ${TRIGGER_DEPLOY} → systemctl start ${DEPLOY_UNIT}
 (same script as manual: ${DEPLOY_CMD})
 
 Test webhook path:
