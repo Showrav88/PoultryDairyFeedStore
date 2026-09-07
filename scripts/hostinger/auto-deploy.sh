@@ -8,8 +8,7 @@ APP_USER="${APP_USER:-newproject}"
 BRANCH="${DEPLOY_BRANCH:-main}"
 LOG_FILE="/var/log/newproject-auto-deploy.log"
 DEPLOY_SCRIPT="${APP_DIR}/scripts/hostinger/deploy.sh"
-LOCK_FILE="/var/lock/newproject-deploy.lock"
-APP_LOCK="${APP_DIR}/.deploy.lock"
+AUTO_LOCK="/var/lock/newproject-auto-deploy.lock"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 touch "$LOG_FILE"
@@ -23,13 +22,21 @@ log() {
 
 log "=== run start (branch=${BRANCH}) ==="
 
-if [[ -f "$LOCK_FILE" ]] || [[ -f "$APP_LOCK" ]]; then
-  log "Deploy already in progress (lock present) — skip"
+# shellcheck disable=SC1091
+source "${APP_DIR}/deploy/deploy-lock.sh"
+
+if newproject_deploy_process_running; then
+  log "Deploy process active (webhook/systemd/hostinger) — skip"
   exit 0
 fi
 
-if pgrep -af '/usr/local/sbin/deploy-newproject|deploy-newproject.sh|newproject-deploy.service' >/dev/null 2>&1; then
-  log "Webhook/systemd deploy in progress — skip"
+if newproject_clear_stale_deploy_locks; then
+  log "Cleared stale deploy lock files (no active process)"
+fi
+
+exec 9>"$AUTO_LOCK"
+if ! flock -n 9; then
+  log "Another auto-deploy instance running — skip"
   exit 0
 fi
 
