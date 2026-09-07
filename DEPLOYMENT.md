@@ -199,6 +199,20 @@ sudo ufw status
 
 Open `http://31.97.50.25:8081`.
 
+## Secrets never go in Git
+
+These stay **only on the VPS** (listed in `.gitignore`):
+
+| Path | Contains |
+|------|----------|
+| `.env` | `DATABASE_URL`, `JWT_SECRET`, `DEPLOY_WEBHOOK_SECRET`, Cloudinary keys |
+| `.deploy-sha`, `.deploy-status`, `.deploy.lock` | Deploy runtime state |
+| `logs/` | Webhook deploy logs |
+
+The `deploy/*.sh` scripts are **safe to commit** — they read secrets from `.env` at runtime, never embed them.
+
+Verify locally: `bash deploy/check-no-secrets-in-git.sh`
+
 ## Automatic deployment after every push to main
 
 GitHub Actions triggers deploy over **HTTP port 8081** (webhook). This works even
