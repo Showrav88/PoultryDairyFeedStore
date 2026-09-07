@@ -62,13 +62,19 @@ launch_root_deploy() {
 
 echo "=== webhook-deploy $(date -Is) TARGET_SHA=${TARGET_SHA:-unknown} user=$(whoami) pid=$$ ==="
 
+# shellcheck disable=SC1091
+source "${APP_DIR}/deploy/deploy-health.sh" 2>/dev/null || true
+
+if [[ -n "${TARGET_SHA:-}" ]] && type health_deploy_sha >/dev/null 2>&1 && health_deploy_sha "$TARGET_SHA"; then
+  write_status "ready" "$TARGET_SHA" "Already deployed at target commit"
+  echo "App already serves ${TARGET_SHA} — skipping redeploy"
+  exit 0
+fi
+
+# Git HEAD can match before npm build finishes — never skip on git alone.
 CURRENT_SHA="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"
 if [[ -n "${TARGET_SHA:-}" && -n "$CURRENT_SHA" && "$CURRENT_SHA" == "$TARGET_SHA" ]]; then
-  if curl --fail --silent http://127.0.0.1:5001/api/health >/dev/null 2>&1; then
-    write_status "ready" "$CURRENT_SHA" "Already deployed at target commit"
-    echo "Already at ${TARGET_SHA} and healthy — skipping redeploy"
-    exit 0
-  fi
+  echo "Git at ${TARGET_SHA} but live app differs — running deploy"
 fi
 
 if deploy_is_live; then

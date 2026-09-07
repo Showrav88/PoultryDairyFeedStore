@@ -26,6 +26,12 @@ git -C "$APP_DIR" clean -fd \
   -e .env -e .env.local -e node_modules -e .next -e logs \
   -e .deploy-sha -e .deploy-status -e .deploy.lock -e src/generated
 
+# Re-exec after git sync so this script uses the latest version from GitHub.
+if [[ "${BOOTSTRAP_REEXEC:-}" != "1" && -f "${APP_DIR}/deploy/bootstrap-vps-git.sh" ]]; then
+  export BOOTSTRAP_REEXEC=1
+  exec bash "${APP_DIR}/deploy/bootstrap-vps-git.sh"
+fi
+
 install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" /usr/local/sbin/deploy-newproject
 install -m 755 "${APP_DIR}/deploy/sbin-sync-newproject-origin" /usr/local/sbin/sync-newproject-origin
 install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" /usr/local/sbin/fix-newproject-ownership
