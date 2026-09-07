@@ -41,6 +41,16 @@ if [[ ! -d "$APP_DIR/.git" ]]; then
   exit 1
 fi
 
+if [[ -f "${APP_DIR}/deploy/ensure-webhook-deploy.sh" ]]; then
+  QUIET=1 bash "${APP_DIR}/deploy/ensure-webhook-deploy.sh" 2>/dev/null || true
+fi
+
+# shellcheck disable=SC1091
+source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
+if type newproject_clear_stale_deploy_locks >/dev/null 2>&1; then
+  newproject_clear_stale_deploy_locks || true
+fi
+
 DEPLOYING_SHA="$(sudo -u "$APP_USER" git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"
 log "Deploying commit ${DEPLOYING_SHA:-unknown} ..."
 write_status "building" "$DEPLOYING_SHA" "Hostinger cron deploy: npm ci, migrate, build"
