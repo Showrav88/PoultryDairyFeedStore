@@ -28,7 +28,7 @@ jobs:
             exit 1
           fi
 
-      - name: Trigger VPS deploy webhook
+      - name: Trigger VPS deploy and wait for health
         env:
           DEPLOY_WEBHOOK_SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
           VPS_DEPLOY_URL: ${{ secrets.VPS_DEPLOY_URL }}
@@ -37,12 +37,13 @@ jobs:
           BASE_URL="${VPS_DEPLOY_URL%/api/deploy}"
           HEALTH_URL="${BASE_URL}/api/health"
           STATUS_URL="${BASE_URL}/api/deploy/status"
+          short_github_sha="${GITHUB_SHA:0:7}"
+          last_webhook_attempt=0
+          webhook_fires=0
 
-          echo "Deploying commit ${GITHUB_SHA} via webhook"
-          code=""
-          body=""
-          for attempt in $(seq 1 6); do
-            echo "Webhook attempt ${attempt}/6 ..."
+          fire_webhook() {
+            webhook_fires=$((webhook_fires + 1))
+            echo "Webhook attempt ${webhook_fires} (commit ${short_github_sha}) ..."
             response=$(curl -sS --connect-timeout 15 --max-time 45 -w "\nHTTP_CODE:%{http_code}" -X POST "$VPS_DEPLOY_URL" \
               -H "Authorization: Bearer ${DEPLOY_WEBHOOK_SECRET}" \
               -H "Content-Type: application/json" \
@@ -54,23 +55,27 @@ jobs:
             echo "$body"
 
             if [[ "$code" == "202" || "$code" == "200" ]]; then
-              break
+              return 0
             fi
-            if [[ "$attempt" -lt 6 ]]; then
-              echo "Webhook not accepted yet, retrying in 20s (VPS may be restarting)..."
-              sleep 20
+            return 1
+          }
+
+          echo "Deploying commit ${GITHUB_SHA} via webhook (+ VPS cron backup every 5 min)"
+          fire_webhook || echo "::warning::Initial webhook failed — VPS cron auto-deploy may still deploy within 5–10 minutes"
+
+          echo "Waiting for deploySha=${short_github_sha} (webhook + cron, up to 40 min) ..."
+
+          for attempt in $(seq 1 240); do
+            # Re-fire webhook if stalled (no progress after 6 min, then every 10 min)
+            if [[ "$attempt" -eq 36 || ( "$attempt" -gt 36 && "$(( attempt % 60 ))" -eq 0 ) ]]; then
+              health_quick=$(curl -sS --connect-timeout 5 --max-time 8 "$HEALTH_URL" 2>/dev/null || echo "")
+              current_quick=$(echo "$health_quick" | jq -r '.deploySha // empty' 2>/dev/null || true)
+              if [[ "$current_quick" != "$short_github_sha" ]]; then
+                echo "No progress at attempt ${attempt} — re-triggering webhook ..."
+                fire_webhook || echo "Webhook re-trigger failed; cron may still deploy"
+              fi
             fi
-          done
 
-          if [[ "$code" != "202" && "$code" != "200" ]]; then
-            echo "::error::Deploy webhook failed with HTTP ${code:-timeout}"
-            exit 1
-          fi
-
-          short_github_sha="${GITHUB_SHA:0:7}"
-          echo "Waiting for deploy to finish (target sha ${short_github_sha}) ..."
-
-          for attempt in $(seq 1 180); do
             health_curl=$(curl -sS --connect-timeout 5 --max-time 10 -w "\nHTTP_CODE:%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "HTTP_CODE:000")
             health_body="${health_curl%HTTP_CODE:*}"
             health_code="${health_curl##*HTTP_CODE:}"
@@ -93,7 +98,9 @@ jobs:
             fi
 
             if [[ -n "$health_json" ]]; then
-              echo "$health_json"
+              if [[ "$attempt" == "1" || "$(( attempt % 12 ))" == "0" ]]; then
+                echo "$health_json"
+              fi
               deployed_sha=$(echo "$health_json" | jq -r '.deploySha // empty')
               deploy_state=$(echo "$health_json" | jq -r '.deployState // empty')
             else
@@ -108,20 +115,17 @@ jobs:
               status_sha=$(echo "$status_json" | jq -r '.deployStatus.sha // empty')
               status_state=$(echo "$status_json" | jq -r '.deployStatus.state // empty')
               deploy_running=$(echo "$status_json" | jq -r '.deployRunning // false')
-              if [[ "$attempt" == "1" || "$(( attempt % 6 ))" == "0" ]]; then
+              if [[ "$attempt" == "1" || "$(( attempt % 12 ))" == "0" ]]; then
                 echo "$status_json" | jq -c '{deploySha, deployRunning, deployStatus}' 2>/dev/null || echo "$status_json"
               fi
             fi
 
             if [[ "$deploy_state" == "failed" || "$status_state" == "failed" ]]; then
-              echo "::error::VPS deploy failed"
-              echo "$status_json"
-              exit 1
+              echo "::warning::Deploy reported failed — waiting for cron retry ..."
             fi
 
             health_ok=$(echo "$health_json" | jq -r '.status // empty')
 
-            # Require live deploySha to match — statusSha is set at webhook accept before build finishes.
             if [[ "$deployed_sha" == "$short_github_sha" ]]; then
               if [[ "$deploy_state" == "ready" || "$status_state" == "ready" || ("$deploy_running" == "false" && "$health_ok" == "ok") ]]; then
                 echo "Deploy finished successfully (sha ${deployed_sha}, attempt ${attempt})."
@@ -130,29 +134,22 @@ jobs:
             fi
 
             if [[ "$deploy_running" == "false" && "$status_sha" == "$short_github_sha" && "$deployed_sha" != "$short_github_sha" && "$attempt" -ge 6 ]]; then
-              echo "::warning::Deploy status targets ${short_github_sha} but app still serves ${deployed_sha:-unknown} — webhook deploy may have stalled"
+              echo "::warning::Webhook stalled (app=${deployed_sha:-unknown}, target=${short_github_sha}) — cron auto-deploy should recover within 5 min"
             fi
 
             if [[ "$app_offline" == "true" ]]; then
-              status_msg=""
-              if [[ -n "$status_json" ]]; then
-                status_msg=$(echo "$status_json" | jq -r '.deployStatus.message // empty' 2>/dev/null || true)
-              fi
-              echo "App offline during build (expected) — attempt ${attempt}/180, target ${short_github_sha}${status_msg:+ — $status_msg}"
+              echo "App offline during build (expected) — attempt ${attempt}/240"
             elif [[ "$deploy_running" == "true" || "$deploy_state" =~ ^(started|pulling|building|restarting|running)$ || "$status_state" =~ ^(started|pulling|building|restarting|running)$ ]]; then
-              echo "Deploy in progress: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-$status_state} (attempt ${attempt}/180)"
-            else
-              echo "Still waiting: deploySha=${deployed_sha:-unknown} statusSha=${status_sha:-unknown} state=${deploy_state:-$status_state} (attempt ${attempt}/180)"
+              echo "Deploy in progress: deploySha=${deployed_sha:-unknown} state=${deploy_state:-$status_state} (attempt ${attempt}/240)"
+            elif [[ "$attempt" == "12" || "$(( attempt % 30 ))" == "0" ]]; then
+              echo "Waiting: deploySha=${deployed_sha:-unknown} target=${short_github_sha} (attempt ${attempt}/240, cron checks every 5 min)"
             fi
 
             sleep 10
           done
 
-          echo "::error::Deploy did not reach commit ${short_github_sha} within 30 minutes"
-          echo "Deploy status:"
+          echo "::error::Deploy did not reach commit ${short_github_sha} within 40 minutes"
           curl -fsS --max-time 15 "$STATUS_URL" 2>/dev/null || true
           echo ""
-          echo "If deploySha is stuck on an old commit, on VPS run:"
-          echo "  sudo bash /var/www/NEWPROJECT/deploy/unlock-deploy.sh --force"
-          echo "  sudo /usr/local/sbin/deploy-newproject"
+          echo "Check VPS cron log: sudo tail -f /var/log/newproject-auto-deploy.log"
           exit 1
