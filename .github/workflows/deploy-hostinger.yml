@@ -99,9 +99,16 @@ jobs:
               exit 1
             fi
 
+            health_ok=$(echo "$health_json" | jq -r '.status // empty')
+
             if [[ "$deployed_sha" == "$short_github_sha" || "$status_sha" == "$short_github_sha" ]]; then
               if [[ "$deploy_state" == "ready" || "$deploy_running" == "false" ]]; then
                 echo "Deploy finished successfully (sha ${deployed_sha:-$status_sha}, attempt ${attempt})."
+                exit 0
+              fi
+              # App is already on the target commit and healthy but status file is stale.
+              if [[ "$health_ok" == "ok" && "$deploy_state" == "started" && "$attempt" -ge 18 ]]; then
+                echo "Deploy sha matches and app is healthy; stale started status treated as success."
                 exit 0
               fi
             fi

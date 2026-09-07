@@ -11,6 +11,17 @@ const ACTIVE_DEPLOY_STATES = new Set([
   "running",
 ]);
 
+const STALE_ACTIVE_MS = 3 * 60 * 1000;
+
+function isStaleActiveDeploy(
+  deployStatus: Record<string, string> | null
+): boolean {
+  if (!deployStatus?.updatedAt) return false;
+  if (!ACTIVE_DEPLOY_STATES.has(deployStatus.state ?? "")) return false;
+  const ageMs = Date.now() - new Date(deployStatus.updatedAt).getTime();
+  return ageMs > STALE_ACTIVE_MS;
+}
+
 export async function GET() {
   const appDir = process.cwd();
   const deploySha = existsSync(join(appDir, ".deploy-sha"))
@@ -27,7 +38,8 @@ export async function GET() {
     }
   }
 
-  const deployRunning = ACTIVE_DEPLOY_STATES.has(deployStatus?.state ?? "");
+  const activeState = ACTIVE_DEPLOY_STATES.has(deployStatus?.state ?? "");
+  const deployRunning = activeState && !isStaleActiveDeploy(deployStatus);
 
   return NextResponse.json({
     deploySha,

@@ -27,6 +27,16 @@ fail() {
 }
 
 echo "=== webhook-deploy $(date -Is) TARGET_SHA=${TARGET_SHA:-unknown} user=$(whoami) pid=$$ ==="
+
+CURRENT_SHA="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo "")"
+if [[ -n "${TARGET_SHA:-}" && -n "$CURRENT_SHA" && "$CURRENT_SHA" == "$TARGET_SHA" ]]; then
+  if curl --fail --silent http://127.0.0.1:5001/api/health >/dev/null 2>&1; then
+    write_status "ready" "$CURRENT_SHA" "Already deployed at target commit"
+    echo "Already at ${TARGET_SHA} and healthy — skipping redeploy"
+    exit 0
+  fi
+fi
+
 write_status "started" "${TARGET_SHA:-}" "Webhook deploy starting"
 
 # Clear stale app-user lock (idle > 45 min)
@@ -40,6 +50,8 @@ fi
 
 if sudo -n "$SBIN_DEPLOY"; then
   echo "Root deploy finished OK"
+  FINAL_SHA="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo "${TARGET_SHA:-}")"
+  write_status "ready" "$FINAL_SHA" "Deployment healthy"
   exit 0
 fi
 
