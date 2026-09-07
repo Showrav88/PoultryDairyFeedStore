@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Fix "insufficient permission for adding an object to repository database .git/objects"
-# after a deploy was interrupted or run as root.
+# Fix root-owned files in the app tree (blocks git pull / cannot create directories).
+# Covers .git/objects and working-tree files like src/** after interrupted deploys.
 #   sudo bash /var/www/NEWPROJECT/deploy/fix-git-ownership.sh
 set -Eeuo pipefail
 
 APP_DIR="/var/www/NEWPROJECT"
 APP_USER="newproject"
+FIX_OWNERSHIP="/usr/local/sbin/fix-newproject-ownership"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run as root: sudo bash $0"
   exit 1
+fi
+
+if [[ -f "${APP_DIR}/deploy/fix-newproject-ownership.sh" ]]; then
+  install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" "$FIX_OWNERSHIP"
 fi
 
 echo "Fixing ownership of ${APP_DIR} for ${APP_USER} ..."

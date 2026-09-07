@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 APP_DIR="/var/www/NEWPROJECT"
 BRANCH="${DEPLOY_BRANCH:-main}"
+APP_USER="newproject"
 LOCK_FILE="/var/lock/newproject-deploy.lock"
 PID_FILE="/var/lock/newproject-deploy.pid"
 LOG_FILE="/var/log/newproject-deploy.log"
@@ -21,6 +22,33 @@ write_status() {
   chown newproject:newproject "$STATUS_FILE" 2>/dev/null || true
 }
 
+fix_app_ownership() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    echo "Ensuring ${APP_DIR} is owned by ${APP_USER} ..."
+    chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
+  fi
+}
+
+git_pull_latest() {
+  git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+  sudo -u "${APP_USER}" git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+
+  echo "Deploying newproject from origin/$BRANCH..."
+  write_status "pulling" "" "Fetching latest code"
+
+  # Run git as root when available — root-owned files break pull for the app user.
+  if [[ "$(id -u)" -eq 0 ]]; then
+    git -C "$APP_DIR" fetch origin "$BRANCH"
+    git -C "$APP_DIR" checkout "$BRANCH"
+    git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+    fix_app_ownership
+  else
+    sudo -u "${APP_USER}" -H git -C "$APP_DIR" fetch origin "$BRANCH"
+    sudo -u "${APP_USER}" -H git -C "$APP_DIR" checkout "$BRANCH"
+    sudo -u "${APP_USER}" -H git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+  fi
+}
+
 on_error() {
   echo "Deploy failed at line $1 (exit $2)"
   write_status "failed" "$(cat "${APP_DIR}/.deploy-sha" 2>/dev/null || echo "")" "Deploy failed at line $1"
@@ -37,6 +65,9 @@ trap cleanup EXIT
 # Keep system deploy command in sync with repo (root only).
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/sbin-deploy-newproject" ]]; then
   install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$SBIN_CMD"
+fi
+if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/fix-newproject-ownership.sh" ]]; then
+  install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" /usr/local/sbin/fix-newproject-ownership
 fi
 
 if [[ -f "$PID_FILE" ]]; then
@@ -88,31 +119,18 @@ fi
 echo "=== Deploy started $(date -Is) ==="
 write_status "started" "" "Deploy started"
 
-# Root-owned files under .git break fetch/pull for the newproject user.
-if [[ "$(id -u)" -eq 0 ]]; then
-  echo "Ensuring ${APP_DIR} is owned by newproject ..."
-  chown -R newproject:newproject "$APP_DIR"
-fi
+fix_app_ownership
+git_pull_latest
 
-git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-sudo -u newproject git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-
-echo "Deploying newproject from origin/$BRANCH..."
-write_status "pulling" "" "Fetching latest code"
-
-sudo -u newproject -H git -C "$APP_DIR" fetch origin "$BRANCH"
-sudo -u newproject -H git -C "$APP_DIR" checkout "$BRANCH"
-sudo -u newproject -H git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
-
-DEPLOYING_SHA="$(sudo -u newproject git -C "$APP_DIR" rev-parse --short HEAD)"
-echo "$DEPLOYING_SHA" | sudo -u newproject tee "$APP_DIR/.deploy-sha" >/dev/null
+DEPLOYING_SHA="$(sudo -u "${APP_USER}" git -C "$APP_DIR" rev-parse --short HEAD)"
+echo "$DEPLOYING_SHA" | sudo -u "${APP_USER}" tee "$APP_DIR/.deploy-sha" >/dev/null
 echo "Building commit $DEPLOYING_SHA ..."
 write_status "building" "$DEPLOYING_SHA" "Installing dependencies and building"
 
 # Stop before overwriting .next — building while next start is running causes 500 errors.
 systemctl stop newproject-api.service 2>/dev/null || true
 
-sudo -u newproject -H bash -lc "
+sudo -u "${APP_USER}" -H bash -lc "
   set -Eeuo pipefail
   cd '$APP_DIR'
   if [[ -f .env ]]; then
@@ -136,7 +154,7 @@ sleep 5
 for attempt in {1..60}; do
   if systemctl is-active --quiet newproject-api.service && \
      curl --fail --silent http://127.0.0.1:5001/api/health >/dev/null 2>&1; then
-    SHA="$(sudo -u newproject git -C "$APP_DIR" rev-parse --short HEAD)"
+    SHA="$(sudo -u "${APP_USER}" git -C "$APP_DIR" rev-parse --short HEAD)"
     echo "$SHA" | sudo -u newproject tee "$APP_DIR/.deploy-sha" >/dev/null
     write_status "ready" "$SHA" "Deployment healthy"
     echo "Deployment healthy: $SHA"

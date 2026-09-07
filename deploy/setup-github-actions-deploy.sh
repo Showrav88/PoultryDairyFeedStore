@@ -25,7 +25,11 @@ if [[ ! -x "$DEPLOY_CMD" ]] || ! grep -q 'deploy/deploy-newproject.sh' "$DEPLOY_
   install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$DEPLOY_CMD"
 fi
 
+FIX_OWNERSHIP="/usr/local/sbin/fix-newproject-ownership"
+install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" "$FIX_OWNERSHIP"
+
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: ${DEPLOY_CMD}" > "$SUDOERS_FILE"
+echo "${DEPLOY_USER} ALL=(root) NOPASSWD: ${FIX_OWNERSHIP}" >> "$SUDOERS_FILE"
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /bin/systemctl restart newproject-api.service" >> "$SUDOERS_FILE"
 echo "${DEPLOY_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl restart newproject-api.service" >> "$SUDOERS_FILE"
 chmod 440 "$SUDOERS_FILE"
