@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BRANCH="${DEPLOY_BRANCH:-main}"
+FIX_OWNERSHIP="/usr/local/sbin/fix-newproject-ownership"
 LOCK_FILE="${APP_DIR}/.deploy.lock"
 LOG_FILE="${APP_DIR}/logs/deploy.log"
 STATUS_FILE="${APP_DIR}/.deploy-status"
@@ -38,6 +39,17 @@ stop_service() {
   sudo -n /usr/bin/systemctl stop newproject-api.service 2>/dev/null ||
     sudo -n /bin/systemctl stop newproject-api.service 2>/dev/null ||
     systemctl stop newproject-api.service 2>/dev/null || true
+}
+
+ensure_app_ownership() {
+  if [[ -x "$FIX_OWNERSHIP" ]]; then
+    sudo -n "$FIX_OWNERSHIP" 2>/dev/null && echo "Fixed app file ownership via sudo" && return 0
+  fi
+  if [[ "$(id -u)" -eq 0 ]]; then
+    chown -R newproject:newproject "$APP_DIR"
+    return 0
+  fi
+  return 1
 }
 
 start_service() {
@@ -79,6 +91,7 @@ git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 export GIT_TERMINAL_PROMPT=0
 
 write_status "pulling" "" "Fetching latest code"
+ensure_app_ownership || true
 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"

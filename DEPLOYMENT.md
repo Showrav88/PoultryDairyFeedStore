@@ -269,9 +269,9 @@ The webhook method avoids SSH entirely.
 
 ### 3. One-time fix if deploy fails on git pull
 
-If `/api/health` shows `deployState: failed` and logs mention
-`insufficient permission for adding an object to repository database .git/objects`,
-run once on the VPS:
+If `/api/health` shows `deployState: failed` and logs mention git permission errors such as
+`insufficient permission for adding an object to repository database .git/objects` or
+`unable to unlink old 'src/...': Permission denied`, run once on the VPS:
 
 ```bash
 sudo bash /var/www/NEWPROJECT/deploy/fix-git-ownership.sh
