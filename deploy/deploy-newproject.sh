@@ -73,6 +73,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Webhook sudoers + systemd (idempotent, every root deploy).
+if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/ensure-webhook-deploy.sh" ]]; then
+  QUIET=1 bash "${APP_DIR}/deploy/ensure-webhook-deploy.sh" || {
+    echo "WARNING: ensure-webhook-deploy.sh failed — webhook auto-deploy may not work until fixed."
+  }
+fi
+
+# shellcheck disable=SC1091
+source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
+if type newproject_clear_stale_deploy_locks >/dev/null 2>&1; then
+  newproject_clear_stale_deploy_locks || true
+fi
+systemctl stop newproject-deploy.service 2>/dev/null || true
+systemctl reset-failed newproject-deploy.service 2>/dev/null || true
+
 # Keep system deploy commands in sync with repo (root only).
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/sbin-deploy-newproject" ]]; then
   install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" "$SBIN_CMD"
@@ -82,10 +97,6 @@ if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/sbin-sync-newproject-origin" ]];
 fi
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/fix-newproject-ownership.sh" ]]; then
   install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" /usr/local/sbin/fix-newproject-ownership
-fi
-if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/newproject-deploy.service" ]]; then
-  install -m 644 "${APP_DIR}/deploy/newproject-deploy.service" /etc/systemd/system/newproject-deploy.service
-  systemctl daemon-reload 2>/dev/null || true
 fi
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/trigger-newproject-deploy.sh" ]]; then
   install -m 755 "${APP_DIR}/deploy/trigger-newproject-deploy.sh" /usr/local/sbin/trigger-newproject-deploy
@@ -117,14 +128,14 @@ fi
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
-  if pgrep -af 'deploy-newproject.sh|sbin-deploy-newproject' >/dev/null 2>&1; then
+  if type newproject_deploy_process_running >/dev/null 2>&1 && newproject_deploy_process_running; then
     echo "Another newproject deployment is already running."
-    pgrep -af 'deploy-newproject.sh|sbin-deploy-newproject' || true
+    pgrep -af 'deploy-newproject|trigger-newproject-deploy' || true
     write_status "running" "" "Deploy already in progress"
     exit 1
   fi
   echo "Stale flock detected, clearing lock file."
-  rm -f "$LOCK_FILE"
+  rm -f "$LOCK_FILE" "$PID_FILE"
   exec 9>"$LOCK_FILE"
   flock -n 9 || { echo "Could not acquire deploy lock."; exit 1; }
 fi
