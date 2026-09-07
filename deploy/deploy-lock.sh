@@ -7,12 +7,8 @@ NEWPROJECT_ROOT_LOCK="/var/lock/newproject-deploy.lock"
 NEWPROJECT_ROOT_PID="/var/lock/newproject-deploy.pid"
 NEWPROJECT_APP_LOCK="${NEWPROJECT_APP_DIR}/.deploy.lock"
 
-# True when a webhook/systemd/cron deploy process is actually running.
+# True when a deploy process is actually running (not a stuck systemd unit alone).
 newproject_deploy_process_running() {
-  if systemctl is-active --quiet newproject-deploy.service 2>/dev/null; then
-    return 0
-  fi
-
   if [[ -f "$NEWPROJECT_ROOT_PID" ]]; then
     local pid
     pid="$(tr -d '[:space:]' < "$NEWPROJECT_ROOT_PID" 2>/dev/null || true)"

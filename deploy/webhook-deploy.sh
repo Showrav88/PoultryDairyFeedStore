@@ -4,8 +4,8 @@
 set -Eeuo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+TRIGGER_DEPLOY="/usr/local/sbin/trigger-newproject-deploy"
 SBIN_DEPLOY="/usr/local/sbin/deploy-newproject"
-DEPLOY_UNIT="newproject-deploy.service"
 LOG_FILE="${APP_DIR}/logs/deploy.log"
 STATUS_FILE="${APP_DIR}/.deploy-status"
 APP_LOCK="${APP_DIR}/.deploy.lock"
@@ -38,19 +38,29 @@ if [[ -n "${TARGET_SHA:-}" && -n "$CURRENT_SHA" && "$CURRENT_SHA" == "$TARGET_SH
   fi
 fi
 
-write_status "started" "${TARGET_SHA:-}" "Webhook deploy starting"
-
-rm -f "$APP_LOCK"
-
-# Prefer systemd oneshot — runs in its own cgroup so stopping newproject-api does not kill deploy.
-if sudo -n systemctl start --no-block "$DEPLOY_UNIT" 2>/dev/null; then
-  echo "Started $DEPLOY_UNIT (detached from app cgroup)"
+# shellcheck disable=SC1091
+source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
+if type newproject_deploy_process_running >/dev/null 2>&1 && newproject_deploy_process_running; then
+  write_status "running" "${TARGET_SHA:-}" "Deploy already in progress"
+  echo "Deploy process already active — skip duplicate webhook"
   exit 0
 fi
 
-echo "systemctl start $DEPLOY_UNIT failed — trying direct sudo deploy in new session ..."
-if sudo -n setsid "$SBIN_DEPLOY" </dev/null >>"$LOG_FILE" 2>&1 & then
-  echo "Direct root deploy launched in new session (pid $!)"
+write_status "started" "${TARGET_SHA:-}" "Webhook deploy starting"
+rm -f "$APP_LOCK"
+
+# Prefer installed trigger (exact sudoers match, resets stuck systemd unit).
+if [[ -x "$TRIGGER_DEPLOY" ]]; then
+  if sudo -n "$TRIGGER_DEPLOY" </dev/null >>"$LOG_FILE" 2>&1 & then
+    echo "Started via $TRIGGER_DEPLOY (pid $!)"
+    exit 0
+  fi
+  echo "sudo $TRIGGER_DEPLOY failed (check /etc/sudoers.d/newproject-deploy)"
+fi
+
+# Fallback: direct root deploy (sudoers must allow SBIN_DEPLOY exactly).
+if sudo -n "$SBIN_DEPLOY" </dev/null >>"$LOG_FILE" 2>&1 & then
+  echo "Started direct root deploy (pid $!)"
   exit 0
 fi
 

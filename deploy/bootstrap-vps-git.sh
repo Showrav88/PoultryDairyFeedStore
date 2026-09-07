@@ -23,6 +23,7 @@ git -C "$APP_DIR" clean -fd \
 install -m 755 "${APP_DIR}/deploy/sbin-deploy-newproject" /usr/local/sbin/deploy-newproject
 install -m 755 "${APP_DIR}/deploy/sbin-sync-newproject-origin" /usr/local/sbin/sync-newproject-origin
 install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" /usr/local/sbin/fix-newproject-ownership
+install -m 755 "${APP_DIR}/deploy/trigger-newproject-deploy.sh" /usr/local/sbin/trigger-newproject-deploy
 
 chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
 
