@@ -88,6 +88,12 @@ fi
 echo "=== Deploy started $(date -Is) ==="
 write_status "started" "" "Deploy started"
 
+# Root-owned files under .git break fetch/pull for the newproject user.
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "Ensuring ${APP_DIR} is owned by newproject ..."
+  chown -R newproject:newproject "$APP_DIR"
+fi
+
 git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 sudo -u newproject git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 

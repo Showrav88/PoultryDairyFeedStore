@@ -241,19 +241,34 @@ sudo /usr/local/sbin/deploy-newproject
 
 ### 2. Add GitHub repository secrets
 
-In GitHub → **Settings → Secrets and variables → Actions**:
+In GitHub → **Settings → Secrets and variables → Actions** (Repository secrets):
 
 | Secret | Value |
 |--------|--------|
-| `DEPLOY_WEBHOOK_SECRET` | Same as `DEPLOY_WEBHOOK_SECRET` in VPS `.env` |
+| `DEPLOY_WEBHOOK_SECRET` | Same string as `DEPLOY_WEBHOOK_SECRET` in VPS `/var/www/NEWPROJECT/.env` |
 | `VPS_DEPLOY_URL` | `http://31.97.50.25:8081/api/deploy` |
 
 Remove old SSH secrets (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`) — not needed.
 
-Every push to `main` will then POST to `/api/deploy`, which runs the same deploy script.
+Every push to `main` runs the **Deploy to Hostinger VPS** workflow, which POSTs to
+`/api/deploy` with `Authorization: Bearer <DEPLOY_WEBHOOK_SECRET>`.
 
 **Note:** `Connection timed out` on port 22 means the firewall blocks GitHub SSH.
 The webhook method avoids SSH entirely.
+
+### 3. One-time fix if deploy fails on git pull
+
+If `/api/health` shows `deployState: failed` and logs mention
+`insufficient permission for adding an object to repository database .git/objects`,
+run once on the VPS:
+
+```bash
+sudo bash /var/www/NEWPROJECT/deploy/fix-git-ownership.sh
+sudo bash /var/www/NEWPROJECT/deploy/unlock-deploy.sh --force
+sudo /usr/local/sbin/deploy-newproject
+```
+
+Then re-run the GitHub Actions workflow or push to `main`.
 
 ## Operations
 

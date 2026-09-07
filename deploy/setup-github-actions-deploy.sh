@@ -36,6 +36,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+echo "Fixing repo ownership for webhook deploy ..."
+chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$APP_DIR"
+
 if grep -q '^DEPLOY_WEBHOOK_SECRET=' "$ENV_FILE"; then
   DEPLOY_SECRET="$(grep '^DEPLOY_WEBHOOK_SECRET=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')"
 else
