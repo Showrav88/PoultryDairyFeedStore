@@ -15,8 +15,25 @@ interface Farmer {
   phone: string;
   address?: string;
   totalDue: number;
+  lifetimeSpend: number;
+  tier: string;
+  tierLabel: string;
   alert: "none" | "normal" | "amber" | "red";
   daysOverdue: number;
+}
+
+function tierBadge(tier: string, label: string) {
+  const styles: Record<string, string> = {
+    platinum: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200",
+    gold: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200",
+    silver: "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200",
+    bronze: "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200",
+  };
+  return (
+    <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", styles[tier] ?? styles.bronze)}>
+      {label}
+    </span>
+  );
 }
 
 function alertBadge(alert: Farmer["alert"], days: number, t: ReturnType<typeof useI18n>["t"]) {
@@ -200,9 +217,15 @@ export default function FarmersPage() {
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="font-semibold">{f.name}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold">{f.name}</p>
+                  {tierBadge(f.tier, f.tierLabel)}
+                </div>
                 <p className="text-sm text-gray-500">{f.phone}</p>
                 {f.address && <p className="text-xs text-gray-500">{f.address}</p>}
+                <p className="mt-1 text-sm text-gray-600">
+                  {t.farmers.lifetimeSpend}: {formatCurrency(f.lifetimeSpend)}
+                </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {f.totalDue > 0 && (
                     <span className="text-sm font-medium text-orange-600">

@@ -6,7 +6,6 @@ import { logAudit } from "@/lib/audit";
 import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
 import { deductStock } from "@/lib/inventory/khucra";
 import { computeLineProfit } from "@/lib/inventory/avg-cost";
-import { collectFarmerPayment } from "@/lib/farmers/payments";
 import type { Prisma } from "@/generated/prisma/client";
 
 const saleSchema = z.object({
@@ -184,10 +183,9 @@ export async function POST(request: Request) {
       const salePaid = Math.min(data.paidAmount, totalAmount);
       const dueAmount = Math.max(0, totalAmount - salePaid);
       const status = calcPaymentStatus(totalAmount, salePaid);
-      const overpayment = data.farmerId ? Math.max(0, data.paidAmount - totalAmount) : 0;
 
-      if (!data.farmerId && data.paidAmount > totalAmount) {
-        throw new Error("Paid amount cannot exceed sale total for counter customers");
+      if (data.paidAmount > totalAmount) {
+        throw new Error("Paid amount cannot exceed sale total");
       }
 
       let customerId: string | undefined;
@@ -243,18 +241,25 @@ export async function POST(request: Request) {
         });
       }
 
-      if (data.paidAmount > 0) {
+      if (data.farmerId) {
+        await tx.farmer.update({
+          where: { id: data.farmerId },
+          data: { lifetimeSpend: { increment: totalAmount } },
+        });
+      }
+
+      if (salePaid > 0) {
         const wallet = await tx.wallet.findUnique({ where: { shopId: session.shopId } });
         if (wallet) {
           await tx.wallet.update({
             where: { shopId: session.shopId },
-            data: { balance: { increment: data.paidAmount } },
+            data: { balance: { increment: salePaid } },
           });
           await tx.walletTransaction.create({
             data: {
               shopId: session.shopId,
               type: "SALE_INCOME",
-              amount: data.paidAmount,
+              amount: salePaid,
               note: `Sale #${sale.id.slice(-6)}`,
               referenceId: sale.id,
             },
@@ -276,19 +281,6 @@ export async function POST(request: Request) {
             note: `Customer due - Sale #${sale.id.slice(-6)} (${dueLabel})`,
             referenceId: sale.id,
           },
-        });
-      }
-
-      if (overpayment > 0 && data.farmerId && farmerName) {
-        await collectFarmerPayment(tx, {
-          shopId: session.shopId,
-          farmerId: data.farmerId,
-          farmerName,
-          amount: overpayment,
-          note: `Overpayment from Sale #${sale.id.slice(-6)}`,
-          saleId: sale.id,
-          excludeSaleId: sale.id,
-          skipWallet: true,
         });
       }
 
