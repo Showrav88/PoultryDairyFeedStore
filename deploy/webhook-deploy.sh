@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Entry point for /api/deploy webhook — prefer root deploy script, fall back to app-user deploy.
+# Entry point for /api/deploy webhook — start root deploy OUTSIDE the app systemd cgroup.
+# Manual equivalent: sudo /usr/local/sbin/deploy-newproject
 set -Eeuo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SBIN_DEPLOY="/usr/local/sbin/deploy-newproject"
-APP_DEPLOY="${APP_DIR}/deploy/deploy-via-app.sh"
+DEPLOY_UNIT="newproject-deploy.service"
 LOG_FILE="${APP_DIR}/logs/deploy.log"
 STATUS_FILE="${APP_DIR}/.deploy-status"
 APP_LOCK="${APP_DIR}/.deploy.lock"
@@ -39,29 +40,18 @@ fi
 
 write_status "started" "${TARGET_SHA:-}" "Webhook deploy starting"
 
-# Clear stale app-user lock (idle > 45 min)
-if [[ -f "$APP_LOCK" ]]; then
-  lock_age=$(( $(date +%s) - $(stat -c %Y "$APP_LOCK" 2>/dev/null || echo 0) ))
-  if [[ "$lock_age" -gt 2700 ]]; then
-    echo "Removing stale app deploy lock (${lock_age}s old)"
-    rm -f "$APP_LOCK"
-  fi
-fi
+rm -f "$APP_LOCK"
 
-if sudo -n "$SBIN_DEPLOY"; then
-  echo "Root deploy finished OK"
-  FINAL_SHA="$(git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo "${TARGET_SHA:-}")"
-  if curl --fail --silent http://127.0.0.1:5001/api/health >/dev/null 2>&1; then
-    write_status "ready" "$FINAL_SHA" "Deployment healthy"
-  else
-    fail "Root deploy exited 0 but app health check failed"
-  fi
+# Prefer systemd oneshot — runs in its own cgroup so stopping newproject-api does not kill deploy.
+if sudo -n systemctl start --no-block "$DEPLOY_UNIT" 2>/dev/null; then
+  echo "Started $DEPLOY_UNIT (detached from app cgroup)"
   exit 0
 fi
 
-echo "Root deploy unavailable or failed (see above), trying app-user deploy..."
-if [[ -x "$APP_DEPLOY" ]]; then
-  exec env TARGET_SHA="${TARGET_SHA:-}" bash "$APP_DEPLOY"
+echo "systemctl start $DEPLOY_UNIT failed — trying direct sudo deploy in new session ..."
+if sudo -n setsid "$SBIN_DEPLOY" </dev/null >>"$LOG_FILE" 2>&1 & then
+  echo "Direct root deploy launched in new session (pid $!)"
+  exit 0
 fi
 
-fail "No deploy method available (need sudo NOPASSWD for $SBIN_DEPLOY or $APP_DEPLOY)"
+fail "Webhook cannot start deploy. On VPS run once as root: sudo bash ${APP_DIR}/deploy/setup-github-actions-deploy.sh"

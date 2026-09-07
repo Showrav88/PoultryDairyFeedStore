@@ -83,6 +83,10 @@ fi
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/fix-newproject-ownership.sh" ]]; then
   install -m 755 "${APP_DIR}/deploy/fix-newproject-ownership.sh" /usr/local/sbin/fix-newproject-ownership
 fi
+if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/newproject-deploy.service" ]]; then
+  install -m 644 "${APP_DIR}/deploy/newproject-deploy.service" /etc/systemd/system/newproject-deploy.service
+  systemctl daemon-reload 2>/dev/null || true
+fi
 
 if [[ -f "$PID_FILE" ]]; then
   OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -137,7 +141,6 @@ fix_app_ownership
 git_pull_latest
 
 DEPLOYING_SHA="$(sudo -u "${APP_USER}" git -C "$APP_DIR" rev-parse --short HEAD)"
-echo "$DEPLOYING_SHA" | sudo -u "${APP_USER}" tee "$APP_DIR/.deploy-sha" >/dev/null
 echo "Building commit $DEPLOYING_SHA ..."
 write_status "building" "$DEPLOYING_SHA" "Installing dependencies, migrating DB, and building"
 

@@ -59,8 +59,30 @@ export async function POST(request: NextRequest) {
     ? readFileSync(deployShaPath, "utf8").trim()
     : "";
 
-  // Skip redundant deploy when manual deploy or a previous run already reached this commit.
-  if (currentSha && currentSha === shortSha) {
+  async function isHealthyAtSha(sha: string): Promise<boolean> {
+    try {
+      const res = await fetch("http://127.0.0.1:5001/api/health", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return false;
+      const data = (await res.json()) as {
+        status?: string;
+        deploySha?: string;
+        deployState?: string;
+      };
+      return (
+        data.status === "ok" &&
+        data.deploySha === sha &&
+        (data.deployState === "ready" || !data.deployState)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // Skip only when app is healthy at target commit (not just .deploy-sha file match).
+  if (currentSha && currentSha === shortSha && (await isHealthyAtSha(shortSha))) {
     try {
       writeDeployStatus("ready", shortSha, "Already deployed at target commit");
     } catch (err) {
@@ -90,7 +112,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const child = spawn("bash", [script], {
+  const child = spawn("setsid", ["bash", script], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     cwd: process.cwd(),
@@ -125,7 +147,7 @@ export async function POST(request: NextRequest) {
       mode,
       message:
         mode === "webhook"
-          ? "Deploy started (sudo deploy-newproject with app-user fallback). Check /api/health."
+          ? "Deploy started via systemd (newproject-deploy.service). Check /api/health."
           : "Deploy started (app user). Check /api/health and logs/deploy.log.",
       logTail: tailDeployLog(20),
     },
