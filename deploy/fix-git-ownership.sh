@@ -19,6 +19,13 @@ fi
 
 echo "Fixing ownership of ${APP_DIR} for ${APP_USER} ..."
 chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
+
+if [[ -f "${APP_DIR}/deploy/sync-to-origin.sh" ]]; then
+  echo "Resetting repo to origin/main ..."
+  bash "${APP_DIR}/deploy/sync-to-origin.sh" "$APP_DIR" main
+  chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
+fi
+
 echo "Done. Retry deploy:"
 echo "  sudo bash ${APP_DIR}/deploy/unlock-deploy.sh --force"
 echo "  sudo /usr/local/sbin/deploy-newproject"

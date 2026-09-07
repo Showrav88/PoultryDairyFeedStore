@@ -30,23 +30,28 @@ fix_app_ownership() {
 }
 
 git_pull_latest() {
-  git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-  sudo -u "${APP_USER}" git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-
   echo "Deploying newproject from origin/$BRANCH..."
   write_status "pulling" "" "Fetching latest code"
 
-  # Run git as root when available — root-owned files break pull for the app user.
-  if [[ "$(id -u)" -eq 0 ]]; then
+  fix_app_ownership
+
+  SYNC_SCRIPT="${APP_DIR}/deploy/sync-to-origin.sh"
+  if [[ -f "$SYNC_SCRIPT" ]]; then
+    bash "$SYNC_SCRIPT" "$APP_DIR" "$BRANCH"
+  elif [[ "$(id -u)" -eq 0 ]]; then
     git -C "$APP_DIR" fetch origin "$BRANCH"
-    git -C "$APP_DIR" checkout "$BRANCH"
-    git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
-    fix_app_ownership
+    git -C "$APP_DIR" checkout -f "$BRANCH"
+    git -C "$APP_DIR" reset --hard "origin/${BRANCH}"
+    git -C "$APP_DIR" clean -fd \
+      -e .env -e .env.local -e node_modules -e .next -e logs \
+      -e .deploy-sha -e .deploy-status -e .deploy.lock -e src/generated
   else
     sudo -u "${APP_USER}" -H git -C "$APP_DIR" fetch origin "$BRANCH"
-    sudo -u "${APP_USER}" -H git -C "$APP_DIR" checkout "$BRANCH"
-    sudo -u "${APP_USER}" -H git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+    sudo -u "${APP_USER}" -H git -C "$APP_DIR" checkout -f "$BRANCH"
+    sudo -u "${APP_USER}" -H git -C "$APP_DIR" reset --hard "origin/${BRANCH}"
   fi
+
+  fix_app_ownership
 }
 
 on_error() {
