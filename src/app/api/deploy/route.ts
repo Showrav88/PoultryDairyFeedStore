@@ -54,11 +54,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const deployShaPath = join(process.cwd(), ".deploy-sha");
-  const currentSha = existsSync(deployShaPath)
-    ? readFileSync(deployShaPath, "utf8").trim()
-    : "";
-
   async function isHealthyAtSha(sha: string): Promise<boolean> {
     try {
       const res = await fetch("http://127.0.0.1:5001/api/health", {
@@ -81,8 +76,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Skip only when app is healthy at target commit (not just .deploy-sha file match).
-  if (currentSha && currentSha === shortSha && (await isHealthyAtSha(shortSha))) {
+  // Skip only when the running app reports the target commit on /api/health.
+  if (await isHealthyAtSha(shortSha)) {
     try {
       writeDeployStatus("ready", shortSha, "Already deployed at target commit");
     } catch (err) {
