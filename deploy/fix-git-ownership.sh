@@ -26,6 +26,12 @@ if [[ -f "${APP_DIR}/deploy/sync-to-origin.sh" ]]; then
   chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
 fi
 
-echo "Done. Retry deploy:"
+echo "Done at $(git -C "$APP_DIR" rev-parse --short HEAD)."
+echo ""
+echo "On VPS never run: sudo -u newproject git pull  (fails on local edits)"
+echo "Use sync instead: sudo /usr/local/sbin/sync-newproject-origin"
+echo ""
+echo "Retry deploy:"
 echo "  sudo bash ${APP_DIR}/deploy/unlock-deploy.sh --force"
 echo "  sudo /usr/local/sbin/deploy-newproject"
+echo "  sudo tail -f /var/log/newproject-deploy.log"
