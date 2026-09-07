@@ -17,7 +17,7 @@ export async function GET(
     include: {
       issues: {
         orderBy: { createdAt: "desc" },
-        take: 20,
+        take: 50,
         include: { items: { include: { product: true } } },
       },
       returns: {
@@ -32,17 +32,35 @@ export async function GET(
 
   if (!farm) return NextResponse.json({ error: "Farm not found" }, { status: 404 });
 
-  const issueCost = farm.issues.reduce((s, i) => s + Number(i.totalCost), 0);
-  const expenseTotal = farm.expenses.reduce((s, e) => s + Number(e.amount), 0);
-  const livestockBuy = farm.livestock
-    .filter((l) => l.type === "BUY")
-    .reduce((s, l) => s + Number(l.amount), 0);
-  const livestockSell = farm.livestock
-    .filter((l) => l.type === "SELL")
-    .reduce((s, l) => s + Number(l.amount), 0);
-  const returnCredit = farm.returns
-    .filter((r) => r.status === "APPROVED")
-    .reduce((s, r) => s + Number(r.totalCost), 0);
+  const [issueAgg, returnAgg, expenseAgg, livestockBuyAgg, livestockSellAgg] =
+    await Promise.all([
+      prisma.farmIssue.aggregate({
+        where: { farmId: id, shopId: session.shopId },
+        _sum: { totalCost: true },
+      }),
+      prisma.farmReturn.aggregate({
+        where: { farmId: id, shopId: session.shopId, status: "APPROVED" },
+        _sum: { totalCost: true },
+      }),
+      prisma.farmExpense.aggregate({
+        where: { farmId: id, shopId: session.shopId },
+        _sum: { amount: true },
+      }),
+      prisma.farmLivestockTransaction.aggregate({
+        where: { farmId: id, shopId: session.shopId, type: "BUY" },
+        _sum: { amount: true },
+      }),
+      prisma.farmLivestockTransaction.aggregate({
+        where: { farmId: id, shopId: session.shopId, type: "SELL" },
+        _sum: { amount: true },
+      }),
+    ]);
+
+  const issueCost = Number(issueAgg._sum.totalCost ?? 0);
+  const returnCredit = Number(returnAgg._sum.totalCost ?? 0);
+  const expenseTotal = Number(expenseAgg._sum.amount ?? 0);
+  const livestockBuy = Number(livestockBuyAgg._sum.amount ?? 0);
+  const livestockSell = Number(livestockSellAgg._sum.amount ?? 0);
 
   return NextResponse.json({
     farm,

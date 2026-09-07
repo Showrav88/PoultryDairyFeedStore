@@ -7,8 +7,10 @@ import { ArrowLeft, Plus, Minus, Package, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, NumberInput, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { FarmIssueHistoryList } from "@/components/farms/issue-history-list";
 import { useI18n } from "@/lib/i18n/context";
 import { ANIMAL_TYPE_LABELS } from "@/lib/farms/wallet";
+import { formatIssueLineQuantity, type FarmIssueRow } from "@/lib/farms/issue-display";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
 import {
   formatFullPackageLabel,
@@ -20,13 +22,11 @@ import {
   type CustomSellUnit,
 } from "@/lib/inventory/sell-units";
 import {
-  formatStockAmount,
   getAvailableStock,
-  getCartReservedStock,
   validateStockForLine,
 } from "@/lib/inventory/cart-stock";
 
-type Tab = "summary" | "issue" | "returns" | "expenses" | "livestock";
+type Tab = "summary" | "issue" | "history" | "returns" | "expenses" | "livestock";
 type SellMode = "khucra" | "full_bag" | "custom";
 
 interface Product {
@@ -56,7 +56,7 @@ interface FarmReturn {
   totalCost: number;
   notes?: string;
   createdAt: string;
-  items: { sellUnitLabel: string; costTotal: number; product: { name: string } }[];
+  items: { sellUnitLabel: string; unitCount: number; costTotal: number; product: { name: string } }[];
 }
 
 export default function FarmDetailPage() {
@@ -82,6 +82,7 @@ export default function FarmDetailPage() {
 
   // Return state
   const [returns, setReturns] = useState<FarmReturn[]>([]);
+  const [issues, setIssues] = useState<FarmIssueRow[]>([]);
   const [returnCart, setReturnCart] = useState<CartItem[]>([]);
   const [returnNotes, setReturnNotes] = useState("");
 
@@ -123,15 +124,26 @@ export default function FarmDetailPage() {
       .then((d) => setReturns(d.returns ?? []));
   }, [id]);
 
+  const loadIssues = useCallback(() => {
+    fetch(`/api/farms/${id}/issues`)
+      .then((r) => r.json())
+      .then((d) => setIssues(d.issues ?? []));
+  }, [id]);
+
   useEffect(() => {
     loadFarm();
     loadProducts();
     loadReturns();
   }, [loadFarm, loadProducts, loadReturns]);
 
+  useEffect(() => {
+    if (tab === "history") loadIssues();
+  }, [tab, loadIssues]);
+
   const tabs: { key: Tab; label: string }[] = [
     { key: "summary", label: t.farms.summary },
     { key: "issue", label: t.farms.issueFeed },
+    { key: "history", label: t.farms.history },
     { key: "returns", label: t.farms.returns },
     { key: "expenses", label: t.farms.expenses },
     { key: "livestock", label: t.farms.livestock },
@@ -196,6 +208,7 @@ export default function FarmDetailPage() {
         setIssueNotes("");
         loadFarm();
         loadProducts();
+        loadIssues();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Issue failed");
       } finally {
@@ -522,6 +535,13 @@ export default function FarmDetailPage() {
         </div>
       )}
 
+      {tab === "history" && (
+        <div>
+          <p className="mb-4 text-sm text-[var(--info-text)]">{t.farms.farmHistoryHelp}</p>
+          <FarmIssueHistoryList issues={issues} />
+        </div>
+      )}
+
       {tab === "returns" && (
         <div className="space-y-4">
           <p className="text-sm text-[var(--info-text)]">{t.farms.returnHelp}</p>
@@ -577,7 +597,7 @@ export default function FarmDetailPage() {
                     <p className="mt-1 text-sm">{formatCurrency(r.totalCost)} · {formatDateTime(r.createdAt)}</p>
                     {r.items.map((item, i) => (
                       <p key={i} className="text-xs text-gray-500">
-                        {item.product.name} — {item.sellUnitLabel}
+                        {item.product.name} — {formatIssueLineQuantity(item)}
                       </p>
                     ))}
                   </div>
