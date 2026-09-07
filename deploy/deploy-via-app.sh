@@ -113,9 +113,12 @@ DEPLOYING_SHA="$(git rev-parse --short HEAD)"
 echo "Building commit $DEPLOYING_SHA ..."
 write_status "building" "$DEPLOYING_SHA" "Installing dependencies, migrating DB, and building"
 
-# Stop before overwriting .next — building while next start is running causes 500 errors.
+# Stop before overwriting .next — build-app.sh also stops stray node processes.
 stop_service
+sleep 2
 
+export DEPLOY_STATUS_FILE="$STATUS_FILE"
+export DEPLOYING_SHA="$DEPLOYING_SHA"
 # shellcheck disable=SC1091
 source "${APP_DIR}/deploy/build-app.sh"
 deploy_build_app "$APP_DIR"

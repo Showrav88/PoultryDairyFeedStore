@@ -26,6 +26,7 @@ journalctl -u newproject-api.service -n 30 --no-pager || true
 echo "3. Rebuild as ${APP_USER} ..."
 sudo -u "${APP_USER}" -H bash -lc "
   set -Eeuo pipefail
+  export DEPLOYING_SHA='repair'
   # shellcheck disable=SC1091
   source '${APP_DIR}/deploy/build-app.sh'
   deploy_build_app '${APP_DIR}'
