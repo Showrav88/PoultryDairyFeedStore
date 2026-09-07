@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { getFarmerBalance } from "@/lib/farmers/balance";
+import { getSpendTier, getTierProgress } from "@/lib/spend/tier";
 
 export async function GET(
   _request: Request,
@@ -20,6 +21,9 @@ export async function GET(
   if (!farmer) return NextResponse.json({ error: "Farmer not found" }, { status: 404 });
 
   const balance = await getFarmerBalance(session.shopId, id);
+  const lifetimeSpend = Number(farmer.lifetimeSpend);
+  const tier = getSpendTier(lifetimeSpend);
+  const progress = getTierProgress(lifetimeSpend);
 
   const sales = await prisma.sale.findMany({
     where: { shopId: session.shopId, farmerId: id },
@@ -32,7 +36,13 @@ export async function GET(
     farmer: {
       ...farmer,
       openingDue: Number(farmer.openingDue),
+      lifetimeSpend,
       totalDue: balance.totalDue,
+      tier: tier.tier,
+      tierLabel: tier.label,
+      nextTier: progress.next?.tier ?? null,
+      nextTierLabel: progress.next?.label ?? null,
+      amountToNextTier: progress.amountToNext,
       alert: balance.alert,
       daysOverdue: balance.daysOverdue,
       oldestDueAt: balance.oldestDueAt?.toISOString() ?? null,

@@ -34,9 +34,28 @@ interface FarmerDetail {
   phone: string;
   address?: string;
   openingDue: number;
+  lifetimeSpend: number;
   totalDue: number;
+  tier: string;
+  tierLabel: string;
+  nextTierLabel: string | null;
+  amountToNextTier: number | null;
   alert: "none" | "normal" | "amber" | "red";
   daysOverdue: number;
+}
+
+function tierBadge(tier: string, label: string) {
+  const styles: Record<string, string> = {
+    platinum: "bg-purple-100 text-purple-800",
+    gold: "bg-yellow-100 text-yellow-800",
+    silver: "bg-slate-200 text-slate-700",
+    bronze: "bg-orange-100 text-orange-800",
+  };
+  return (
+    <span className={cn("rounded-full px-3 py-1 text-sm font-medium", styles[tier] ?? styles.bronze)}>
+      {label}
+    </span>
+  );
 }
 
 export default function FarmerProfilePage() {
@@ -152,6 +171,17 @@ export default function FarmerProfilePage() {
             <h1 className="text-xl font-bold">{farmer.name}</h1>
             <p className="text-sm text-gray-500">{farmer.phone}</p>
             {farmer.address && <p className="text-sm text-gray-500">{farmer.address}</p>}
+            <div className="mt-3">{tierBadge(farmer.tier, farmer.tierLabel)}</div>
+            <p className="mt-3 text-sm">
+              {t.farmers.lifetimeSpend}:{" "}
+              <strong>{formatCurrency(farmer.lifetimeSpend)}</strong>
+            </p>
+            {farmer.nextTierLabel && farmer.amountToNextTier !== null && (
+              <p className="mt-1 text-xs text-gray-500">
+                {t.farmers.nextTier}: {farmer.nextTierLabel} —{" "}
+                {formatCurrency(farmer.amountToNextTier)} {t.farmers.toGo}
+              </p>
+            )}
             <p className="mt-3 text-lg font-semibold text-orange-600">
               {t.farmers.totalDue}: {formatCurrency(farmer.totalDue)}
             </p>

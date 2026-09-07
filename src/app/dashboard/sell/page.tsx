@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,20 +55,37 @@ function SellCounterContent() {
   const [searchResults, setSearchResults] = useState<Sale[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [farmerId, setFarmerId] = useState<string | null>(farmerIdParam);
-  const [farmerName, setFarmerName] = useState("");
-  const [farmerDue, setFarmerDue] = useState(0);
+  const [farmer, setFarmer] = useState<{
+    id: string;
+    name: string;
+    totalDue: number;
+    lifetimeSpend: number;
+    tier: string;
+    tierLabel: string;
+  } | null>(null);
+
+  const loadFarmer = useCallback((id: string) => {
+    fetch(`/api/farmers/${id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.farmer) return;
+        setFarmer({
+          id: d.farmer.id,
+          name: d.farmer.name,
+          totalDue: d.farmer.totalDue ?? 0,
+          lifetimeSpend: d.farmer.lifetimeSpend ?? 0,
+          tier: d.farmer.tier ?? "bronze",
+          tierLabel: d.farmer.tierLabel ?? "Bronze",
+        });
+      });
+  }, []);
 
   useEffect(() => {
     if (farmerIdParam) {
       setFarmerId(farmerIdParam);
-      fetch(`/api/farmers/${farmerIdParam}`)
-        .then((r) => r.json())
-        .then((d) => {
-          setFarmerName(d.farmer?.name ?? "");
-          setFarmerDue(d.farmer?.totalDue ?? 0);
-        });
+      loadFarmer(farmerIdParam);
     }
-  }, [farmerIdParam]);
+  }, [farmerIdParam, loadFarmer]);
 
   const loadProducts = useCallback(() => {
     fetch("/api/products")
@@ -178,11 +194,7 @@ function SellCounterContent() {
         setCustomerName("");
         setCustomerPhone("");
         setPaidAmount(0);
-        if (farmerId) {
-          fetch(`/api/farmers/${farmerId}`)
-            .then((r) => r.json())
-            .then((d) => setFarmerDue(d.farmer?.totalDue ?? 0));
-        }
+        if (farmerId) loadFarmer(farmerId);
         loadProducts();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Sale failed");
@@ -205,28 +217,11 @@ function SellCounterContent() {
   return (
     <>
       <div className="mb-4 rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] p-4 text-sm text-[var(--info-text)]">
-        <p className="font-semibold">{t.sell.redesignHint}</p>
-        <p className="mt-1 opacity-90">{t.sell.autoPriceHint}</p>
+        <p className="font-semibold">{farmer ? t.farmers.sellCounterHint : t.sell.redesignHint}</p>
+        <p className="mt-1 opacity-90">
+          {farmer ? t.farmers.sellPaidThisSaleOnly : t.sell.autoPriceHint}
+        </p>
       </div>
-
-      {farmerId && farmerName && (
-        <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm dark:border-emerald-800 dark:bg-emerald-950/30">
-          <p className="font-semibold text-emerald-800 dark:text-emerald-300">
-            {t.farmers.sellToFarmer}: {farmerName}
-          </p>
-          {farmerDue > 0 && (
-            <p className="mt-1 text-orange-700 dark:text-orange-300">
-              {t.farmers.farmerDueBalance}: {formatCurrency(farmerDue)}
-            </p>
-          )}
-          <Link
-            href={`/dashboard/farmers/${farmerId}`}
-            className="mt-2 inline-block text-emerald-700 underline dark:text-emerald-400"
-          >
-            {t.farmers.profile}
-          </Link>
-        </div>
-      )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold sm:text-2xl">{t.sell.title}</h1>
@@ -316,7 +311,7 @@ function SellCounterContent() {
             onManualPhoneChange={setCustomerPhone}
             onComplete={completeSale}
             loading={loading}
-            farmerMode={!!farmerId}
+            farmer={farmer}
           />
         </div>
       </div>

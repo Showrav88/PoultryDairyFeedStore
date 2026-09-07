@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { getFarmerBalanceSummaries } from "@/lib/farmers/balance";
+import { getSpendTier } from "@/lib/spend/tier";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -36,10 +37,15 @@ export async function GET(request: Request) {
   return NextResponse.json({
     farmers: farmers.map((f) => {
       const bal = balances.get(f.id);
+      const lifetimeSpend = Number(f.lifetimeSpend);
+      const tier = getSpendTier(lifetimeSpend);
       return {
         ...f,
         openingDue: Number(f.openingDue),
+        lifetimeSpend,
         totalDue: bal?.totalDue ?? 0,
+        tier: tier.tier,
+        tierLabel: tier.label,
         alert: bal?.alert ?? "none",
         daysOverdue: bal?.daysOverdue ?? 0,
         oldestDueAt: bal?.oldestDueAt?.toISOString() ?? null,

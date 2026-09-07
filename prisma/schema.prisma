@@ -109,15 +109,16 @@ model Buyer {
 // ─── Farmers (credit customers — downstream) ────────────────────────────────
 
 model Farmer {
-  id         String   @id @default(cuid())
-  shopId     String
-  name       String
-  phone      String
-  address    String?
-  openingDue Decimal  @default(0) @db.Decimal(12, 2)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String   @id @default(cuid())
+  shopId        String
+  name          String
+  phone         String
+  address       String?
+  openingDue    Decimal  @default(0) @db.Decimal(12, 2)
+  lifetimeSpend Decimal  @default(0) @db.Decimal(12, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   shop  Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
   sales Sale[]
