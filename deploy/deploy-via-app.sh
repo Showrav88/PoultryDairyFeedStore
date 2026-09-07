@@ -6,6 +6,7 @@ set -Eeuo pipefail
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BRANCH="${DEPLOY_BRANCH:-main}"
 FIX_OWNERSHIP="/usr/local/sbin/fix-newproject-ownership"
+SYNC_ORIGIN="/usr/local/sbin/sync-newproject-origin"
 LOCK_FILE="${APP_DIR}/.deploy.lock"
 LOG_FILE="${APP_DIR}/logs/deploy.log"
 STATUS_FILE="${APP_DIR}/.deploy-status"
@@ -52,6 +53,20 @@ ensure_app_ownership() {
   return 1
 }
 
+sync_from_origin() {
+  if [[ -x "$SYNC_ORIGIN" ]]; then
+    sudo -n "$SYNC_ORIGIN" "$APP_DIR" "$BRANCH" 2>/dev/null && echo "Synced repo via sudo sync-newproject-origin" && return 0
+  fi
+  if [[ -f "${APP_DIR}/deploy/sync-to-origin.sh" ]]; then
+    ensure_app_ownership || true
+    bash "${APP_DIR}/deploy/sync-to-origin.sh" "$APP_DIR" "$BRANCH"
+    return 0
+  fi
+  git fetch origin "$BRANCH"
+  git checkout -f "$BRANCH"
+  git reset --hard "origin/${BRANCH}"
+}
+
 start_service() {
   if sudo -n /usr/bin/systemctl start newproject-api.service 2>/dev/null; then
     echo "Started via sudo systemctl"
@@ -92,15 +107,7 @@ export GIT_TERMINAL_PROMPT=0
 
 write_status "pulling" "" "Fetching latest code"
 ensure_app_ownership || true
-
-SYNC_SCRIPT="${APP_DIR}/deploy/sync-to-origin.sh"
-if [[ -f "$SYNC_SCRIPT" ]]; then
-  bash "$SYNC_SCRIPT" "$APP_DIR" "$BRANCH"
-else
-  git fetch origin "$BRANCH"
-  git checkout -f "$BRANCH"
-  git reset --hard "origin/${BRANCH}"
-fi
+sync_from_origin
 
 DEPLOYING_SHA="$(git rev-parse --short HEAD)"
 echo "$DEPLOYING_SHA" > "$APP_DIR/.deploy-sha"
