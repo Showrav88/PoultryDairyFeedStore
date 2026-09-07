@@ -7,9 +7,11 @@ import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
 import { deductStock } from "@/lib/inventory/khucra";
 import { computeLineProfit } from "@/lib/inventory/avg-cost";
 import { collectFarmerPayment } from "@/lib/farmers/payments";
+import type { Prisma } from "@/generated/prisma/client";
 
 const saleSchema = z.object({
   farmerId: z.string().optional(),
+  customerId: z.string().optional(),
   customerName: z.string().optional(),
   customerPhone: z.string().optional(),
   paidAmount: z.number().min(0),
@@ -30,6 +32,73 @@ function calcPaymentStatus(total: number, paid: number) {
   return "DUE";
 }
 
+async function resolveCustomer(
+  tx: Prisma.TransactionClient,
+  shopId: string,
+  params: {
+    customerId?: string;
+    customerName?: string;
+    customerPhone?: string;
+    requireIdentity: boolean;
+  }
+): Promise<{ customerId?: string; customerName?: string; customerPhone?: string }> {
+  if (params.customerId) {
+    const customer = await tx.customer.findFirst({
+      where: { id: params.customerId, shopId, isActive: true },
+    });
+    if (!customer) throw new Error("Customer not found");
+    return {
+      customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+    };
+  }
+
+  const name = params.customerName?.trim();
+  const phone = params.customerPhone?.trim();
+
+  if (params.requireIdentity) {
+    if (!name || !phone || phone.length < 10) {
+      throw new Error("Due sales require customer name and phone (or select a saved customer)");
+    }
+  }
+
+  if (phone && phone.length >= 10) {
+    const existing = await tx.customer.findUnique({
+      where: { shopId_phone: { shopId, phone } },
+    });
+    if (existing) {
+      if (name && name !== existing.name) {
+        await tx.customer.update({
+          where: { id: existing.id },
+          data: { name },
+        });
+      }
+      return {
+        customerId: existing.id,
+        customerName: name || existing.name,
+        customerPhone: phone,
+      };
+    }
+
+    if (name) {
+      const created = await tx.customer.create({
+        data: { shopId, name, phone },
+      });
+      return {
+        customerId: created.id,
+        customerName: created.name,
+        customerPhone: created.phone,
+      };
+    }
+  }
+
+  return {
+    customerName: name || undefined,
+    customerPhone: phone || undefined,
+  };
+}
+
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -37,6 +106,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const data = saleSchema.parse(body);
+
+    if (data.farmerId && data.customerId) {
+      throw new Error("Cannot link both farmer and customer on the same sale");
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       let farmerName: string | undefined;
@@ -108,21 +181,38 @@ export async function POST(request: Request) {
       const totalCost = lineItems.reduce((s, i) => s + i.costTotal, 0);
       const totalProfit = lineItems.reduce((s, i) => s + i.profit, 0);
 
-      if (!data.farmerId && data.paidAmount > totalAmount) {
-        throw new Error("Paid amount cannot exceed sale total for general customers");
-      }
-
       const salePaid = Math.min(data.paidAmount, totalAmount);
       const dueAmount = Math.max(0, totalAmount - salePaid);
       const status = calcPaymentStatus(totalAmount, salePaid);
       const overpayment = data.farmerId ? Math.max(0, data.paidAmount - totalAmount) : 0;
 
+      if (!data.farmerId && data.paidAmount > totalAmount) {
+        throw new Error("Paid amount cannot exceed sale total for counter customers");
+      }
+
+      let customerId: string | undefined;
+      let customerName: string | undefined;
+      let customerPhone: string | undefined;
+
+      if (!data.farmerId) {
+        const resolved = await resolveCustomer(tx, session.shopId, {
+          customerId: data.customerId,
+          customerName: data.customerName,
+          customerPhone: data.customerPhone,
+          requireIdentity: dueAmount > 0,
+        });
+        customerId = resolved.customerId;
+        customerName = resolved.customerName;
+        customerPhone = resolved.customerPhone;
+      }
+
       const sale = await tx.sale.create({
         data: {
           shopId: session.shopId,
           farmerId: data.farmerId,
-          customerName: data.farmerId ? farmerName : data.customerName,
-          customerPhone: data.customerPhone,
+          customerId,
+          customerName: data.farmerId ? farmerName : customerName,
+          customerPhone: data.farmerId ? undefined : customerPhone,
           totalAmount,
           totalCost,
           totalProfit,
@@ -132,13 +222,24 @@ export async function POST(request: Request) {
           notes: data.notes,
           items: { create: lineItems },
         },
-        include: { items: { include: { product: true } }, farmer: true },
+        include: {
+          items: { include: { product: true } },
+          farmer: true,
+          customer: true,
+        },
       });
 
       for (const update of inventoryUpdates) {
         await tx.product.update({
           where: { id: update.id },
           data: update.state.newState,
+        });
+      }
+
+      if (customerId) {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { lifetimeSpend: { increment: totalAmount } },
         });
       }
 
@@ -162,12 +263,17 @@ export async function POST(request: Request) {
       }
 
       if (dueAmount > 0) {
+        const dueLabel = farmerName
+          ? farmerName
+          : customerName
+            ? customerName
+            : "Customer";
         await tx.walletTransaction.create({
           data: {
             shopId: session.shopId,
             type: "RECEIVABLE",
             amount: dueAmount,
-            note: `Customer due - Sale #${sale.id.slice(-6)}${farmerName ? ` (${farmerName})` : data.customerName ? ` (${data.customerName})` : ""}`,
+            note: `Customer due - Sale #${sale.id.slice(-6)} (${dueLabel})`,
             referenceId: sale.id,
           },
         });
@@ -213,6 +319,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q");
   const farmerId = searchParams.get("farmerId");
+  const customerId = searchParams.get("customerId");
   const date = searchParams.get("date");
 
   const where: Record<string, unknown> = { shopId: session.shopId };
@@ -221,11 +328,17 @@ export async function GET(request: Request) {
     where.farmerId = farmerId;
   }
 
+  if (customerId) {
+    where.customerId = customerId;
+  }
+
   if (q) {
     where.OR = [
       { customerName: { contains: q, mode: "insensitive" } },
       { customerPhone: { contains: q } },
       { farmer: { name: { contains: q, mode: "insensitive" } } },
+      { customer: { name: { contains: q, mode: "insensitive" } } },
+      { customer: { phone: { contains: q } } },
     ];
   }
 
@@ -239,7 +352,7 @@ export async function GET(request: Request) {
 
   const sales = await prisma.sale.findMany({
     where,
-    include: { items: { include: { product: true } }, farmer: true },
+    include: { items: { include: { product: true } }, farmer: true, customer: true },
     orderBy: { createdAt: "desc" },
     take: 50,
   });

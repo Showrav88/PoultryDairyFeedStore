@@ -23,6 +23,7 @@ model Shop {
   products           Product[]
   buyers             Buyer[]
   farmers            Farmer[]
+  customers          Customer[]
   farms              Farm[]
   purchases          Purchase[]
   sales              Sale[]
@@ -127,6 +128,27 @@ model Farmer {
   @@index([shopId, phone])
 }
 
+// ─── Customers (walk-in / counter credit — separate from farmers) ────────────
+
+model Customer {
+  id            String   @id @default(cuid())
+  shopId        String
+  name          String
+  phone         String
+  lifetimeSpend Decimal  @default(0) @db.Decimal(12, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shop     Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  sales    Sale[]
+  payments CustomerPayment[]
+
+  @@unique([shopId, phone])
+  @@index([shopId])
+  @@index([shopId, name])
+}
+
 // ─── Purchases (Buy from supplier) ───────────────────────────────────────────
 
 enum PaymentStatus {
@@ -175,6 +197,7 @@ model Sale {
   id            String        @id @default(cuid())
   shopId        String
   farmerId      String?
+  customerId    String?
   customerName  String?
   customerPhone String?
   totalAmount   Decimal       @db.Decimal(12, 2)
@@ -187,16 +210,19 @@ model Sale {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  shop   Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  farmer Farmer? @relation(fields: [farmerId], references: [id])
-  items  SaleItem[]
-  paymentAllocations FarmerPaymentAllocation[]
+  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  farmer   Farmer?   @relation(fields: [farmerId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+  items    SaleItem[]
+  paymentAllocations         FarmerPaymentAllocation[]
+  customerPaymentAllocations CustomerPaymentAllocation[]
 
   @@index([shopId])
   @@index([shopId, createdAt])
   @@index([shopId, customerPhone])
   @@index([shopId, customerName])
   @@index([shopId, farmerId])
+  @@index([shopId, customerId])
 }
 
 model SaleItem {
@@ -249,6 +275,39 @@ model FarmerPaymentAllocation {
 
   payment FarmerPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   sale    Sale?         @relation(fields: [saleId], references: [id])
+
+  @@index([paymentId])
+  @@index([saleId])
+}
+
+// ─── Customer payments (due collection history) ───────────────────────────────
+
+model CustomerPayment {
+  id         String   @id @default(cuid())
+  shopId     String
+  customerId String
+  amount     Decimal  @db.Decimal(12, 2)
+  note       String?
+  saleId     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer    Customer                    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  allocations CustomerPaymentAllocation[]
+
+  @@index([shopId])
+  @@index([customerId])
+  @@index([customerId, createdAt])
+}
+
+model CustomerPaymentAllocation {
+  id        String  @id @default(cuid())
+  paymentId String
+  saleId    String?
+  amount    Decimal @db.Decimal(12, 2)
+
+  payment CustomerPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  sale    Sale?           @relation(fields: [saleId], references: [id])
 
   @@index([paymentId])
   @@index([saleId])
@@ -319,6 +378,7 @@ enum AuditEntity {
   PRODUCT
   BUYER
   FARMER
+  CUSTOMER
   FARM
   PURCHASE
   SALE
