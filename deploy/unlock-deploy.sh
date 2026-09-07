@@ -9,14 +9,23 @@ APP_DIR="/var/www/NEWPROJECT"
 LOCK_FILE="/var/lock/newproject-deploy.lock"
 PID_FILE="/var/lock/newproject-deploy.pid"
 APP_LOCK_FILE="${APP_DIR}/.deploy.lock"
+AUTO_LOCK="/var/lock/newproject-auto-deploy.lock"
 
 FORCE=false
 if [[ "${1:-}" == "--force" ]]; then
   FORCE=true
 fi
 
+# shellcheck disable=SC1091
+source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
+
 running() {
-  pgrep -af '/usr/local/sbin/deploy-newproject|deploy-newproject.sh|deploy-via-app.sh' 2>/dev/null || true
+  if type newproject_deploy_process_running >/dev/null 2>&1; then
+    newproject_deploy_process_running
+    return $?
+  fi
+  pgrep -af '/usr/local/sbin/deploy-newproject|deploy-newproject.sh|deploy-via-app.sh|scripts/hostinger/deploy.sh' \
+    >/dev/null 2>&1
 }
 
 if [[ "$FORCE" == true ]]; then
@@ -30,13 +39,13 @@ if [[ "$FORCE" == true ]]; then
       kill -KILL "$OLD_PID" 2>/dev/null || true
     fi
   fi
-  pkill -TERM -f 'deploy-newproject.sh|deploy-via-app.sh' 2>/dev/null || true
+  pkill -TERM -f 'deploy-newproject.sh|deploy-via-app.sh|scripts/hostinger/deploy.sh' 2>/dev/null || true
   sleep 2
-  pkill -KILL -f 'deploy-newproject.sh|deploy-via-app.sh' 2>/dev/null || true
+  pkill -KILL -f 'deploy-newproject.sh|deploy-via-app.sh|scripts/hostinger/deploy.sh' 2>/dev/null || true
 else
-  if running | grep -q .; then
+  if running; then
     echo "Deploy process still running:"
-    running
+    pgrep -af '/usr/local/sbin/deploy-newproject|deploy-newproject.sh|deploy-via-app.sh|scripts/hostinger/deploy.sh|newproject-deploy.service' 2>/dev/null || true
     echo ""
     echo "Wait for it to finish, or run with --force:"
     echo "  sudo bash $0 --force"
@@ -44,5 +53,5 @@ else
   fi
 fi
 
-rm -f "$LOCK_FILE" "$PID_FILE" "$APP_LOCK_FILE"
+rm -f "$LOCK_FILE" "$PID_FILE" "$APP_LOCK_FILE" "$AUTO_LOCK"
 echo "Deploy lock cleared."
