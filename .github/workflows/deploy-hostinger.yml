@@ -121,15 +121,16 @@ jobs:
 
             health_ok=$(echo "$health_json" | jq -r '.status // empty')
 
-            if [[ "$deployed_sha" == "$short_github_sha" || "$status_sha" == "$short_github_sha" ]]; then
+            # Require live deploySha to match — statusSha is set at webhook accept before build finishes.
+            if [[ "$deployed_sha" == "$short_github_sha" ]]; then
               if [[ "$deploy_state" == "ready" || "$status_state" == "ready" || ("$deploy_running" == "false" && "$health_ok" == "ok") ]]; then
-                echo "Deploy finished successfully (sha ${deployed_sha:-$status_sha}, attempt ${attempt})."
+                echo "Deploy finished successfully (sha ${deployed_sha}, attempt ${attempt})."
                 exit 0
               fi
-              if [[ "$health_ok" == "ok" && "$deploy_state" == "started" && "$attempt" -ge 18 ]]; then
-                echo "Deploy sha matches and app is healthy; stale started status treated as success."
-                exit 0
-              fi
+            fi
+
+            if [[ "$deploy_running" == "false" && "$status_sha" == "$short_github_sha" && "$deployed_sha" != "$short_github_sha" && "$attempt" -ge 6 ]]; then
+              echo "::warning::Deploy status targets ${short_github_sha} but app still serves ${deployed_sha:-unknown} — webhook deploy may have stalled"
             fi
 
             if [[ "$app_offline" == "true" ]]; then
