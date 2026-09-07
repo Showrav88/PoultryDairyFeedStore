@@ -1,0 +1,20 @@
+[Unit]
+Description=Deploy Poultry Feed Store from GitHub (webhook/manual)
+After=network-online.target
+Wants=network-online.target
+# Do not stop this unit when the app service stops — deploy must survive systemctl stop newproject-api
+Conflicts=
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/var/www/NEWPROJECT
+Environment=DEPLOY_BRANCH=main
+ExecStart=/usr/local/sbin/deploy-newproject
+StandardOutput=append:/var/log/newproject-deploy.log
+StandardError=append:/var/log/newproject-deploy.log
+TimeoutStartSec=2400
+
+[Install]
+WantedBy=multi-user.target

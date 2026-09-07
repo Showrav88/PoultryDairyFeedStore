@@ -38,5 +38,8 @@ elif [[ "$code" == "202" ]]; then
   echo ""
   echo "202 = deploy started in background. Watch:"
   echo "  sudo tail -f /var/log/newproject-deploy.log"
-  echo "If stuck on lock: sudo bash ${APP_DIR}/deploy/unlock-deploy.sh"
+  echo "  sudo systemctl status newproject-deploy.service"
+  echo "If webhook deploy fails, run once:"
+  echo "  sudo bash ${APP_DIR}/deploy/setup-github-actions-deploy.sh"
+  echo "If stuck on lock: sudo bash ${APP_DIR}/deploy/unlock-deploy.sh --force"
 fi
