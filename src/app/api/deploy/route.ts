@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { spawn } from "child_process";
-import { existsSync, openSync } from "fs";
+import { existsSync, openSync, readFileSync } from "fs";
 import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { tailDeployLog } from "@/lib/deploy/log-tail";
@@ -54,10 +54,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  try {
-    writeDeployStatus("started", shortSha, "Webhook accepted, deploy starting");
-  } catch (err) {
-    console.error("Could not write deploy status:", err);
+  const deployShaPath = join(process.cwd(), ".deploy-sha");
+  const currentSha = existsSync(deployShaPath)
+    ? readFileSync(deployShaPath, "utf8").trim()
+    : "";
+
+  // Skip redundant deploy when manual deploy or a previous run already reached this commit.
+  if (currentSha && currentSha === shortSha) {
+    try {
+      writeDeployStatus("ready", shortSha, "Already deployed at target commit");
+    } catch (err) {
+      console.error("Could not write deploy status:", err);
+    }
+    return NextResponse.json(
+      {
+        status: "accepted",
+        sha: shortSha,
+        mode: "skip",
+        message: "Already deployed at target commit. No redeploy needed.",
+        logTail: tailDeployLog(10),
+      },
+      { status: 202 }
+    );
   }
 
   const logPath = ensureDeployLogDir();
