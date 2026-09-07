@@ -279,6 +279,17 @@ sudo bash /var/www/NEWPROJECT/deploy/unlock-deploy.sh --force
 sudo /usr/local/sbin/deploy-newproject
 ```
 
+If git reports **local changes would be overwritten by merge**, reset the VPS checkout to GitHub (`.env` is kept):
+
+```bash
+cd /var/www/NEWPROJECT
+sudo git fetch origin main
+sudo git reset --hard origin/main
+sudo git clean -fd -e .env -e node_modules -e .next -e logs -e .deploy-sha -e .deploy-status
+sudo chown -R newproject:newproject /var/www/NEWPROJECT
+sudo /usr/local/sbin/deploy-newproject
+```
+
 Then re-run the GitHub Actions workflow or push to `main`.
 
 ## Operations

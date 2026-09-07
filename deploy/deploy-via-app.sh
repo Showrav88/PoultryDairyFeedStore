@@ -92,9 +92,15 @@ export GIT_TERMINAL_PROMPT=0
 
 write_status "pulling" "" "Fetching latest code"
 ensure_app_ownership || true
-git fetch origin "$BRANCH"
-git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
+
+SYNC_SCRIPT="${APP_DIR}/deploy/sync-to-origin.sh"
+if [[ -f "$SYNC_SCRIPT" ]]; then
+  bash "$SYNC_SCRIPT" "$APP_DIR" "$BRANCH"
+else
+  git fetch origin "$BRANCH"
+  git checkout -f "$BRANCH"
+  git reset --hard "origin/${BRANCH}"
+fi
 
 DEPLOYING_SHA="$(git rev-parse --short HEAD)"
 echo "$DEPLOYING_SHA" > "$APP_DIR/.deploy-sha"
