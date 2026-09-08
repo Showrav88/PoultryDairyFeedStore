@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { getPurchasePayableTotal } from "@/lib/pricing/tp-pricing";
 
 const updateSchema = z.object({
   paidAmount: z.number().min(0).optional(),
@@ -37,16 +38,19 @@ export async function PATCH(
       return NextResponse.json({ error: "Purchase not found" }, { status: 404 });
     }
 
-    const totalCost = Number(existing.totalCost);
+    const payableTotal = getPurchasePayableTotal(existing);
     const newPaid = data.paidAmount ?? Number(existing.paidAmount);
 
-    if (newPaid > totalCost) {
-      return NextResponse.json({ error: "Paid amount cannot exceed total cost" }, { status: 400 });
+    if (newPaid > payableTotal) {
+      return NextResponse.json(
+        { error: "Paid amount cannot exceed supplier payable total" },
+        { status: 400 }
+      );
     }
 
     const oldPaid = Number(existing.paidAmount);
     const paymentDelta = newPaid - oldPaid;
-    const newDue = Math.max(0, totalCost - newPaid);
+    const newDue = Math.max(0, payableTotal - newPaid);
     const oldDue = Number(existing.dueAmount);
 
     const result = await prisma.$transaction(async (tx) => {
@@ -55,7 +59,7 @@ export async function PATCH(
         data: {
           paidAmount: newPaid,
           dueAmount: newDue,
-          status: calcPaymentStatus(totalCost, newPaid),
+          status: calcPaymentStatus(payableTotal, newPaid),
           ...(data.notes !== undefined ? { notes: data.notes } : {}),
         },
         include: { items: { include: { product: true } }, buyer: true },
@@ -76,7 +80,7 @@ export async function PATCH(
               shopId: session.shopId,
               type: paymentDelta > 0 ? "PURCHASE_EXPENSE" : "ADJUSTMENT",
               amount: Math.abs(paymentDelta),
-              note: `Purchase payment update #${purchase.id.slice(-6)}`,
+              note: `Purchase payment update #${purchase.id.slice(-6)}${existing.pricingModel === "DUAL" ? " (TP)" : ""}`,
               referenceId: purchase.id,
             },
           });
@@ -92,8 +96,8 @@ export async function PATCH(
             amount: Math.abs(dueDelta),
             note:
               dueDelta > 0
-                ? `Supplier due increased #${purchase.id.slice(-6)}`
-                : `Supplier due reduced #${purchase.id.slice(-6)}`,
+                ? `Supplier due increased #${purchase.id.slice(-6)}${existing.pricingModel === "DUAL" ? " [TP]" : ""}`
+                : `Supplier due reduced #${purchase.id.slice(-6)}${existing.pricingModel === "DUAL" ? " [TP]" : ""}`,
             referenceId: purchase.id,
           },
         });
