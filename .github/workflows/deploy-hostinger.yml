@@ -66,13 +66,16 @@ jobs:
           echo "Waiting for deploySha=${short_github_sha} (webhook + cron, up to 40 min) ..."
 
           for attempt in $(seq 1 240); do
-            # Re-fire webhook if stalled (no progress after 6 min, then every 10 min)
+            # Re-fire webhook only when nothing is actively deploying (avoid refreshing stale "running")
             if [[ "$attempt" -eq 36 || ( "$attempt" -gt 36 && "$(( attempt % 60 ))" -eq 0 ) ]]; then
               health_quick=$(curl -sS --connect-timeout 5 --max-time 8 "$HEALTH_URL" 2>/dev/null || echo "")
               current_quick=$(echo "$health_quick" | jq -r '.deploySha // empty' 2>/dev/null || true)
-              if [[ "$current_quick" != "$short_github_sha" ]]; then
-                echo "No progress at attempt ${attempt} — re-triggering webhook ..."
+              running_quick=$(echo "$health_quick" | jq -r '.deployRunning // false' 2>/dev/null || true)
+              if [[ "$current_quick" != "$short_github_sha" && "$running_quick" != "true" ]]; then
+                echo "No progress at attempt ${attempt} (deploy not running) — re-triggering webhook ..."
                 fire_webhook || echo "Webhook re-trigger failed; cron may still deploy"
+              elif [[ "$running_quick" == "true" ]]; then
+                echo "Deploy still active at attempt ${attempt} — waiting (no duplicate webhook)"
               fi
             fi
 
@@ -103,9 +106,11 @@ jobs:
               fi
               deployed_sha=$(echo "$health_json" | jq -r '.deploySha // empty')
               deploy_state=$(echo "$health_json" | jq -r '.deployState // empty')
+              health_deploy_running=$(echo "$health_json" | jq -r '.deployRunning // empty')
             else
               deployed_sha=""
               deploy_state=""
+              health_deploy_running=""
             fi
 
             status_sha=""
@@ -115,6 +120,9 @@ jobs:
               status_sha=$(echo "$status_json" | jq -r '.deployStatus.sha // empty')
               status_state=$(echo "$status_json" | jq -r '.deployStatus.state // empty')
               deploy_running=$(echo "$status_json" | jq -r '.deployRunning // false')
+              if [[ "$health_deploy_running" == "true" || "$health_deploy_running" == "false" ]]; then
+                deploy_running="$health_deploy_running"
+              fi
               if [[ "$attempt" == "1" || "$(( attempt % 12 ))" == "0" ]]; then
                 echo "$status_json" | jq -c '{deploySha, deployRunning, deployStatus}' 2>/dev/null || echo "$status_json"
               fi
@@ -139,8 +147,12 @@ jobs:
 
             if [[ "$app_offline" == "true" ]]; then
               echo "App offline during build (expected) — attempt ${attempt}/240"
-            elif [[ "$deploy_running" == "true" || "$deploy_state" =~ ^(started|pulling|building|restarting|running)$ || "$status_state" =~ ^(started|pulling|building|restarting|running)$ ]]; then
+            elif [[ "$deploy_running" == "true" ]]; then
               echo "Deploy in progress: deploySha=${deployed_sha:-unknown} state=${deploy_state:-$status_state} (attempt ${attempt}/240)"
+            elif [[ "$deploy_state" =~ ^(started|pulling|building|restarting)$ || "$status_state" =~ ^(started|pulling|building|restarting)$ ]]; then
+              echo "Deploy in progress: deploySha=${deployed_sha:-unknown} state=${deploy_state:-$status_state} (attempt ${attempt}/240)"
+            elif [[ "$deploy_state" == "running" || "$status_state" == "running" ]]; then
+              echo "Stale duplicate-block cleared — waiting for retry (attempt ${attempt}/240)"
             elif [[ "$attempt" == "12" || "$(( attempt % 30 ))" == "0" ]]; then
               echo "Waiting: deploySha=${deployed_sha:-unknown} target=${short_github_sha} (attempt ${attempt}/240, cron checks every 5 min)"
             fi

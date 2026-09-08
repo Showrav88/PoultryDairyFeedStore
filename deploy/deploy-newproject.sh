@@ -109,7 +109,7 @@ if [[ -f "$PID_FILE" ]]; then
     if [[ -f "$LOG_FILE" ]]; then
       LOG_AGE_MIN=$(( ( $(date +%s) - $(stat -c %Y "$LOG_FILE" 2>/dev/null || echo 0) ) / 60 ))
     fi
-    if [[ "$LOG_AGE_MIN" -gt 45 ]]; then
+    if [[ "$LOG_AGE_MIN" -gt 15 ]]; then
       echo "Stale deploy pid $OLD_PID (log idle ${LOG_AGE_MIN}m) — stopping."
       kill -TERM "$OLD_PID" 2>/dev/null || true
       sleep 2

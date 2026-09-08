@@ -6,6 +6,7 @@ NEWPROJECT_APP_DIR="${NEWPROJECT_APP_DIR:-/var/www/NEWPROJECT}"
 NEWPROJECT_ROOT_LOCK="/var/lock/newproject-deploy.lock"
 NEWPROJECT_ROOT_PID="/var/lock/newproject-deploy.pid"
 NEWPROJECT_APP_LOCK="${NEWPROJECT_APP_DIR}/.deploy.lock"
+STALE_ACTIVE_SEC="${NEWPROJECT_STALE_ACTIVE_SEC:-180}"
 
 # True when a deploy process is actually running (not a stuck systemd unit alone).
 newproject_deploy_process_running() {
@@ -36,7 +37,7 @@ newproject_clear_stale_deploy_status() {
       if [[ -n "$updated_at" ]]; then
         now="$(date +%s)"
         age_sec=$(( now - $(date -d "$updated_at" +%s 2>/dev/null || echo "$now") ))
-        if [[ "$age_sec" -lt 600 ]]; then
+        if [[ "$age_sec" -lt "$STALE_ACTIVE_SEC" ]]; then
           return 1
         fi
       fi

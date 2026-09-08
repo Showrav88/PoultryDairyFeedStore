@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { effectiveDeployState, isDeployRunning } from "@/lib/deploy/stale";
 
 function readFileText(path: string): string | null {
   try {
@@ -36,11 +37,13 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`;
     const deployStatus = readDeployStatus();
     const deploySha = readDeploySha() ?? deployStatus?.sha ?? null;
+    const deployState = effectiveDeployState(deployStatus);
     return NextResponse.json({
       status: "ok",
       database: "connected",
       deploySha,
-      deployState: deployStatus?.state ?? null,
+      deployState,
+      deployRunning: isDeployRunning(deployStatus),
       deployMessage: deployStatus?.message ?? null,
       timestamp: new Date().toISOString(),
     });

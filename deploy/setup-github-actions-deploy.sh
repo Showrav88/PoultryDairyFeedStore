@@ -14,6 +14,8 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 bash "${APP_DIR}/deploy/ensure-webhook-deploy.sh"
+
+if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE"
   exit 1
 fi
