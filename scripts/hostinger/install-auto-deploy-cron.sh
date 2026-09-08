@@ -9,6 +9,7 @@ set -Eeuo pipefail
 APP_DIR="${APP_DIR:-/var/www/NEWPROJECT}"
 AUTO_DEPLOY="${APP_DIR}/scripts/hostinger/auto-deploy.sh"
 DEPLOY_SCRIPT="${APP_DIR}/scripts/hostinger/deploy.sh"
+DEPLOY_CMD="/usr/local/sbin/deploy-newproject"
 CRON_FILE="/etc/cron.d/newproject-auto-deploy"
 LOG_FILE="/var/log/newproject-auto-deploy.log"
 
@@ -32,7 +33,7 @@ cat > "$CRON_FILE" <<EOF
 # Log: ${LOG_FILE}
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-*/5 * * * * root ${AUTO_DEPLOY}
+*/5 * * * * root ${DEPLOY_CMD} >> ${LOG_FILE} 2>&1
 EOF
 
 chmod 644 "$CRON_FILE"

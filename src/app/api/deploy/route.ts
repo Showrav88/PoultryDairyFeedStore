@@ -40,22 +40,15 @@ export async function POST(request: NextRequest) {
   const shortSha = sha.length >= 7 ? sha.slice(0, 7) : sha;
 
   const webhookScript = join(process.cwd(), "deploy/webhook-deploy.sh");
+  const sbinDeploy = "/usr/local/sbin/deploy-newproject";
   const deployScript = join(process.cwd(), "deploy/deploy-via-app.sh");
 
-  const script = existsSync(webhookScript)
-    ? webhookScript
-    : existsSync(deployScript)
-      ? deployScript
-      : null;
-
-  if (!script) {
-    return NextResponse.json(
-      { error: "Deploy scripts are missing on the server" },
-      { status: 503 }
-    );
-  }
-
   const appDir = process.cwd();
+
+  // Sync deploy scripts from GitHub before spawning (newproject owns the repo).
+  spawnSync("git", ["-C", appDir, "fetch", "origin", "main"], { stdio: "ignore" });
+  spawnSync("git", ["-C", appDir, "reset", "--hard", "origin/main"], { stdio: "ignore" });
+
   const statusPath = join(appDir, ".deploy-status");
   if (existsSync(statusPath)) {
     try {
@@ -71,6 +64,22 @@ export async function POST(request: NextRequest) {
   const prepareScript = join(appDir, "deploy/pre-webhook-prepare.sh");
   if (existsSync(prepareScript)) {
     spawnSync("bash", [prepareScript], { cwd: appDir, stdio: "ignore" });
+  }
+
+  const useDirectSbin = existsSync(sbinDeploy);
+  const script = useDirectSbin
+    ? sbinDeploy
+    : existsSync(webhookScript)
+      ? webhookScript
+      : existsSync(deployScript)
+        ? deployScript
+        : null;
+
+  if (!script) {
+    return NextResponse.json(
+      { error: "Deploy scripts are missing on the server" },
+      { status: 503 }
+    );
   }
 
   async function isHealthyAtSha(sha: string): Promise<boolean> {
@@ -126,7 +135,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const child = spawn("setsid", ["bash", script], {
+  const launchArgv = useDirectSbin
+    ? ["sudo", "-n", sbinDeploy]
+    : ["bash", script];
+
+  const child = spawn("setsid", launchArgv, {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     cwd: process.cwd(),
@@ -147,8 +160,9 @@ export async function POST(request: NextRequest) {
 
   child.unref();
 
-  const mode =
-    script === webhookScript
+  const mode = useDirectSbin
+    ? "sbin"
+    : script === webhookScript
       ? "webhook"
       : script === deployScript
         ? "app-user"
@@ -160,9 +174,11 @@ export async function POST(request: NextRequest) {
       sha: shortSha,
       mode,
       message:
-        mode === "webhook"
-          ? "Deploy started via systemd (newproject-deploy.service). Check /api/health."
-          : "Deploy started (app user). Check /api/health and logs/deploy.log.",
+        mode === "sbin"
+          ? "Deploy started via /usr/local/sbin/deploy-newproject. Check /api/health."
+          : mode === "webhook"
+            ? "Deploy started via systemd (newproject-deploy.service). Check /api/health."
+            : "Deploy started (app user). Check /api/health and logs/deploy.log.",
       logTail: tailDeployLog(20),
     },
     { status: 202 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installed to /usr/local/sbin/deploy-newproject
-# Syncs repo from GitHub FIRST (even when deploy/*.sh is locally modified), then runs repo script.
+# Always syncs from GitHub and clears orphan locks before running repo deploy script.
 set -euo pipefail
 
 APP_DIR="/var/www/NEWPROJECT"
@@ -8,12 +8,36 @@ APP_USER="newproject"
 BRANCH="${DEPLOY_BRANCH:-main}"
 SYNC_BIN="/usr/local/sbin/sync-newproject-origin"
 REPO_DEPLOY="${APP_DIR}/deploy/deploy-newproject.sh"
+LOG_FILE="/var/log/newproject-deploy.log"
+
+inline_clear_locks() {
+  rm -f /var/lock/newproject-deploy.pid /var/lock/newproject-deploy.lock \
+    "${APP_DIR}/.deploy.lock" /var/lock/newproject-auto-deploy.lock 2>/dev/null || true
+  systemctl stop newproject-deploy.service 2>/dev/null || true
+  systemctl reset-failed newproject-deploy.service 2>/dev/null || true
+  local status_file="${APP_DIR}/.deploy-status"
+  if [[ -f "$status_file" ]]; then
+    local state updated_at age_sec now
+    state="$(grep -o '"state"[[:space:]]*:[[:space:]]*"[^"]*"' "$status_file" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
+    case "$state" in
+      started|pulling|building|restarting|running)
+        updated_at="$(grep -o '"updatedAt"[[:space:]]*:[[:space:]]*"[^"]*"' "$status_file" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
+        now="$(date +%s)"
+        age_sec=$(( now - $(date -d "${updated_at:-1970-01-01}" +%s 2>/dev/null || echo "$now") ))
+        if [[ "$age_sec" -ge 120 ]]; then
+          rm -f "$status_file"
+          echo "[sbin] Cleared stale deploy status (${state}, ${age_sec}s old)" >>"$LOG_FILE"
+        fi
+        ;;
+    esac
+  fi
+}
 
 sync_from_origin() {
   git -C "$APP_DIR" config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-  echo "[sbin] Fetching origin/${BRANCH} ..."
+  echo "[sbin] Fetching origin/${BRANCH} ..." >>"$LOG_FILE"
   git -C "$APP_DIR" fetch origin "$BRANCH"
-  echo "[sbin] Resetting to origin/${BRANCH} (discard local edits on VPS) ..."
+  echo "[sbin] Resetting to origin/${BRANCH} ..." >>"$LOG_FILE"
   git -C "$APP_DIR" checkout -f "$BRANCH"
   git -C "$APP_DIR" reset --hard "origin/${BRANCH}"
   git -C "$APP_DIR" clean -fd \
@@ -26,21 +50,22 @@ sync_from_origin() {
     -e .deploy-status \
     -e .deploy.lock \
     -e src/generated
-  echo "[sbin] Checkout at $(git -C "$APP_DIR" rev-parse --short HEAD)"
+  echo "[sbin] Checkout at $(git -C "$APP_DIR" rev-parse --short HEAD)" >>"$LOG_FILE"
 }
 
 if [[ "$(id -u)" -eq 0 ]]; then
+  echo "[sbin] deploy-newproject start $(date -Is)" >>"$LOG_FILE"
   chown -R "${APP_USER}:${APP_USER}" "$APP_DIR" 2>/dev/null || true
-  # Clear orphan locks before sync (uses installed lock helpers when present).
-  rm -f /var/lock/newproject-deploy.pid /var/lock/newproject-deploy.lock "${APP_DIR}/.deploy.lock" 2>/dev/null || true
-  if [[ -x "${APP_DIR}/deploy/unlock-deploy.sh" ]]; then
-    bash "${APP_DIR}/deploy/unlock-deploy.sh" --force 2>/dev/null || \
-      bash "${APP_DIR}/deploy/unlock-deploy.sh" 2>/dev/null || true
-  fi
+  inline_clear_locks
   if [[ -x "$SYNC_BIN" ]]; then
     "$SYNC_BIN" "$APP_DIR" "$BRANCH"
   else
     sync_from_origin
+  fi
+  if [[ -x "${APP_DIR}/deploy/unlock-deploy.sh" ]]; then
+    bash "${APP_DIR}/deploy/unlock-deploy.sh" --force >>"$LOG_FILE" 2>&1 || true
+  else
+    inline_clear_locks
   fi
   chown -R "${APP_USER}:${APP_USER}" "$APP_DIR"
 fi

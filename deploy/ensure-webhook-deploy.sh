@@ -79,3 +79,7 @@ if ! verify_webhook_sudo; then
 fi
 
 log "Webhook deploy prerequisites OK."
+
+if [[ -f "${APP_DIR}/scripts/hostinger/install-auto-deploy-cron.sh" ]]; then
+  bash "${APP_DIR}/scripts/hostinger/install-auto-deploy-cron.sh"
+fi

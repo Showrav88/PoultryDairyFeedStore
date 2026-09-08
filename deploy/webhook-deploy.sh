@@ -60,6 +60,13 @@ launch_root_deploy() {
 
 echo "=== webhook-deploy $(date -Is) TARGET_SHA=${TARGET_SHA:-unknown} user=$(whoami) pid=$$ ==="
 
+# Pull latest deploy scripts before any lock logic (breaks stale-script deadlock on VPS).
+git -C "$APP_DIR" fetch origin main 2>/dev/null || true
+git -C "$APP_DIR" reset --hard origin/main 2>/dev/null || true
+git -C "$APP_DIR" clean -fd \
+  -e .env -e .env.local -e node_modules -e .next -e logs \
+  -e .deploy-sha -e .deploy-status -e .deploy.lock -e src/generated 2>/dev/null || true
+
 if [[ -x "${APP_DIR}/deploy/pre-webhook-prepare.sh" ]]; then
   bash "${APP_DIR}/deploy/pre-webhook-prepare.sh" || true
 fi
@@ -85,13 +92,9 @@ if [[ -n "${TARGET_SHA:-}" && -n "$CURRENT_SHA" && "$CURRENT_SHA" == "$TARGET_SH
   echo "Git at ${TARGET_SHA} but live app differs — running deploy"
 fi
 
-if deploy_is_live; then
-  echo "Deploy process already active — skip duplicate webhook (status unchanged)"
-  exit 0
-fi
-
 rm -f "$APP_LOCK"
 
+# Always launch root deploy — deploy-newproject owns flock/duplicate handling.
 if [[ -x "$TRIGGER_DEPLOY" ]] && launch_root_deploy "$TRIGGER_DEPLOY"; then
   write_status "started" "${TARGET_SHA:-}" "Webhook deploy started via trigger"
   echo "Deploy started via $TRIGGER_DEPLOY"
