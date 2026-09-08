@@ -22,6 +22,8 @@ interface Product {
   weightUnit: string;
   basePackageSize: number;
   sellPrice: number;
+  defaultCostPrice?: number | null;
+  defaultTpPrice?: number | null;
   allowedSellUnits: number[];
   inventory: {
     formattedTotal: string;
@@ -67,6 +69,8 @@ export default function ProductsPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [packageSize, setPackageSize] = useState(0);
   const [sellPrice, setSellPrice] = useState(0);
+  const [defaultCostPrice, setDefaultCostPrice] = useState(0);
+  const [defaultTpPrice, setDefaultTpPrice] = useState(0);
   const [allowedSellUnits, setAllowedSellUnits] = useState<number[]>(
     PRODUCT_TYPE_TEMPLATES.feed_bag.allowedSellUnits
   );
@@ -97,6 +101,8 @@ export default function ProductsPage() {
     setImageUrl(p.imageUrl ?? "");
     setPackageSize(packageDisplaySize(p.weightUnit, p.basePackageSize));
     setSellPrice(p.sellPrice);
+    setDefaultCostPrice(p.defaultCostPrice ?? 0);
+    setDefaultTpPrice(p.defaultTpPrice ?? 0);
     setAllowedSellUnits(p.allowedSellUnits);
     setShowForm(true);
   };
@@ -108,6 +114,8 @@ export default function ProductsPage() {
     setName("");
     setImageUrl("");
     setSellPrice(0);
+    setDefaultCostPrice(0);
+    setDefaultTpPrice(0);
   };
 
   const buildPayload = () => ({
@@ -116,6 +124,8 @@ export default function ProductsPage() {
     weightUnit: tpl.weightUnit,
     basePackageSize: packageToBaseSize(tpl.weightUnit, packageSize > 0 ? packageSize : effectivePackageSize),
     sellPrice,
+    defaultCostPrice: defaultCostPrice > 0 ? defaultCostPrice : null,
+    defaultTpPrice: defaultTpPrice > 0 ? defaultTpPrice : null,
     allowedSellUnits,
   });
 
@@ -169,7 +179,8 @@ export default function ProductsPage() {
     name.trim().length > 0 &&
     sellPrice > 0 &&
     allowedSellUnits.length > 0 &&
-    (!showPackageSize || packageSize > 0);
+    (!showPackageSize || packageSize > 0) &&
+    (defaultTpPrice <= 0 || (defaultCostPrice > 0 && defaultTpPrice >= defaultCostPrice));
 
   return (
     <div>
@@ -250,6 +261,29 @@ export default function ProductsPage() {
               <p className="mt-1 text-xs text-gray-500">{t.products.referencePriceHelp}</p>
             </div>
 
+            <div>
+              <Label>{t.products.defaultCostPrice}</Label>
+              <NumberInput
+                placeholder={t.common.enterPrice}
+                value={defaultCostPrice}
+                onChange={setDefaultCostPrice}
+              />
+              <p className="mt-1 text-xs text-gray-500">{t.products.defaultCostPriceHelp}</p>
+            </div>
+
+            <div>
+              <Label>{t.products.defaultTpPrice}</Label>
+              <NumberInput
+                placeholder={t.common.enterPrice}
+                value={defaultTpPrice}
+                onChange={setDefaultTpPrice}
+              />
+              <p className="mt-1 text-xs text-gray-500">{t.products.defaultTpPriceHelp}</p>
+              {defaultTpPrice > 0 && defaultCostPrice > 0 && defaultTpPrice < defaultCostPrice && (
+                <p className="mt-1 text-xs text-red-600">{t.products.tpMustBeAtLeastCost}</p>
+              )}
+            </div>
+
             <div className="md:col-span-2">
               <Label>{t.products.quickSellButtons} *</Label>
               <p className="mb-2 text-xs text-gray-500">{t.products.quickSellHelp}</p>
@@ -303,6 +337,16 @@ export default function ProductsPage() {
                     <p className="text-xs text-emerald-700">{typeLabel} · {sizeLabel}</p>
                     {p.sellPrice > 0 && (
                       <p className="text-xs text-gray-400">Suggested: {formatCurrency(p.sellPrice)}</p>
+                    )}
+                    {(p.defaultCostPrice ?? 0) > 0 && (
+                      <p className="text-xs text-gray-400">
+                        {t.products.defaultCostPrice}: {formatCurrency(p.defaultCostPrice!)}
+                      </p>
+                    )}
+                    {(p.defaultTpPrice ?? 0) > 0 && (
+                      <p className="text-xs text-gray-400">
+                        {t.products.defaultTpPrice}: {formatCurrency(p.defaultTpPrice!)}
+                      </p>
                     )}
                   </div>
                 </div>

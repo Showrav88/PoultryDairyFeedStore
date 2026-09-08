@@ -7,6 +7,7 @@ import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
 import { formatAvgCostPerKg } from "@/lib/inventory/avg-cost";
 import { formatStockDisplay } from "@/lib/inventory/sell-units";
+import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
 
 function enrichProduct(p: {
   stockInSmallestUnit: number;
@@ -14,6 +15,8 @@ function enrichProduct(p: {
   openPackageRemaining: number;
   basePackageSize: number;
   sellPrice: unknown;
+  defaultCostPrice?: unknown;
+  defaultTpPrice?: unknown;
   avgCostPerSmallestUnit: unknown;
   weightUnit: string;
   [key: string]: unknown;
@@ -29,6 +32,8 @@ function enrichProduct(p: {
     ...p,
     sellPrice: Number(p.sellPrice),
     suggestedSellPrice: Number(p.sellPrice),
+    defaultCostPrice: p.defaultCostPrice != null ? Number(p.defaultCostPrice) : null,
+    defaultTpPrice: p.defaultTpPrice != null ? Number(p.defaultTpPrice) : null,
     inventory: {
       ...inventory,
       formattedTotal: formatStockDisplay(
@@ -65,6 +70,8 @@ const createSchema = z.object({
   weightUnit: z.enum(["GENERIC", "GRAM", "KG", "LITER", "ML", "BAG", "PIECE"]),
   basePackageSize: z.number().int().positive(),
   sellPrice: z.number().min(0).optional(),
+  defaultCostPrice: z.number().min(0).nullable().optional(),
+  defaultTpPrice: z.number().min(0).nullable().optional(),
   allowedSellUnits: z.array(z.number().int().positive()).optional(),
 });
 
@@ -75,6 +82,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const data = createSchema.parse(body);
+
+    const tpError = validateDefaultTpPrice(data.defaultCostPrice, data.defaultTpPrice);
+    if (tpError) {
+      return NextResponse.json({ error: tpError }, { status: 400 });
+    }
 
     const shop = await prisma.shop.update({
       where: { id: session.shopId },
@@ -92,6 +104,8 @@ export async function POST(request: Request) {
         weightUnit: data.weightUnit,
         basePackageSize: data.basePackageSize,
         sellPrice: data.sellPrice ?? 0,
+        defaultCostPrice: data.defaultCostPrice ?? null,
+        defaultTpPrice: data.defaultTpPrice ?? null,
         allowedSellUnits: data.allowedSellUnits ?? [100, 250, 500, 1000],
       },
     });
