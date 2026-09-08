@@ -3,11 +3,21 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
-import { getPurchasePayableTotal } from "@/lib/pricing/tp-pricing";
+import {
+  buildLegacyTpConversion,
+  canApplyLegacyTp,
+  getPurchasePayableTotal,
+} from "@/lib/pricing/tp-pricing";
+
+const legacyTpItemSchema = z.object({
+  itemId: z.string(),
+  tpPricePerUnit: z.number().min(0),
+});
 
 const updateSchema = z.object({
   paidAmount: z.number().min(0).optional(),
   notes: z.string().optional(),
+  legacyTpItems: z.array(legacyTpItemSchema).min(1).optional(),
 });
 
 function calcPaymentStatus(total: number, paid: number) {
@@ -31,11 +41,97 @@ export async function PATCH(
 
     const existing = await prisma.purchase.findFirst({
       where: { id, shopId: session.shopId },
-      include: { buyer: true },
+      include: { items: true, buyer: true },
     });
 
     if (!existing) {
       return NextResponse.json({ error: "Purchase not found" }, { status: 404 });
+    }
+
+    if (data.legacyTpItems) {
+      if (!canApplyLegacyTp(existing)) {
+        return NextResponse.json(
+          { error: "Manual TP applies only to legacy purchases with open supplier due" },
+          { status: 400 }
+        );
+      }
+
+      const itemMap = new Map(existing.items.map((i) => [i.id, i]));
+      if (data.legacyTpItems.length !== existing.items.length) {
+        return NextResponse.json(
+          { error: "Enter TP price for every purchase line" },
+          { status: 400 }
+        );
+      }
+
+      const lines = data.legacyTpItems.map((input) => {
+        const item = itemMap.get(input.itemId);
+        if (!item) throw new Error("Invalid purchase line");
+        return {
+          itemId: item.id,
+          costPricePerUnit: Number(item.costPricePerUnit),
+          quantity: item.quantity,
+          tpPricePerUnit: input.tpPricePerUnit,
+        };
+      });
+
+      const paidAmount = Number(existing.paidAmount);
+      const conversion = buildLegacyTpConversion(lines, paidAmount);
+      const oldDue = Number(existing.dueAmount);
+      const dueDelta = conversion.newDue - oldDue;
+
+      const result = await prisma.$transaction(async (tx) => {
+        for (const line of conversion.lineUpdates) {
+          await tx.purchaseItem.update({
+            where: { id: line.itemId },
+            data: {
+              tpPricePerUnit: line.tpPricePerUnit,
+              tpPriceTotal: line.tpPriceTotal,
+            },
+          });
+        }
+
+        const purchase = await tx.purchase.update({
+          where: { id },
+          data: {
+            pricingModel: "DUAL",
+            totalTpAmount: conversion.totalTpAmount,
+            dueAmount: conversion.newDue,
+            status: conversion.newStatus,
+            ...(data.notes !== undefined ? { notes: data.notes } : {}),
+          },
+          include: { items: { include: { product: true } }, buyer: true },
+        });
+
+        if (dueDelta !== 0) {
+          await tx.walletTransaction.create({
+            data: {
+              shopId: session.shopId,
+              type: "PAYABLE",
+              amount: Math.abs(dueDelta),
+              note:
+                dueDelta > 0
+                  ? `Legacy TP applied — supplier due increased #${purchase.id.slice(-6)} [TP]`
+                  : `Legacy TP applied — supplier due reduced #${purchase.id.slice(-6)} [TP]`,
+              referenceId: purchase.id,
+            },
+          });
+        }
+
+        return purchase;
+      });
+
+      await logAudit(
+        session.shopId,
+        "PURCHASE",
+        id,
+        "UPDATE",
+        `Legacy TP applied: payable ৳${conversion.totalTpAmount} (was cost-based due)`,
+        existing,
+        result
+      );
+
+      return NextResponse.json({ purchase: result });
     }
 
     const payableTotal = getPurchasePayableTotal(existing);
