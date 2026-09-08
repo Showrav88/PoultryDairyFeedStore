@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
 import { formatStockDisplay } from "@/lib/inventory/sell-units";
+import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
 
 export async function GET(
   _req: Request,
@@ -24,6 +25,8 @@ export async function GET(
     product: {
       ...product,
       sellPrice: Number(product.sellPrice),
+      defaultCostPrice: product.defaultCostPrice != null ? Number(product.defaultCostPrice) : null,
+      defaultTpPrice: product.defaultTpPrice != null ? Number(product.defaultTpPrice) : null,
       inventory: {
         ...getInventorySummary({
           stockInSmallestUnit: product.stockInSmallestUnit,
@@ -47,6 +50,8 @@ const updateSchema = z.object({
   weightUnit: z.enum(["GENERIC", "GRAM", "KG", "LITER", "ML", "BAG", "PIECE"]).optional(),
   basePackageSize: z.number().int().positive().optional(),
   sellPrice: z.number().min(0).optional(),
+  defaultCostPrice: z.number().min(0).nullable().optional(),
+  defaultTpPrice: z.number().min(0).nullable().optional(),
   allowedSellUnits: z.array(z.number().int().positive()).optional(),
 });
 
@@ -64,6 +69,21 @@ export async function PATCH(
   try {
     const body = await request.json();
     const data = updateSchema.parse(body);
+
+    const mergedCost = data.defaultCostPrice !== undefined
+      ? data.defaultCostPrice
+      : existing.defaultCostPrice != null
+        ? Number(existing.defaultCostPrice)
+        : null;
+    const mergedTp = data.defaultTpPrice !== undefined
+      ? data.defaultTpPrice
+      : existing.defaultTpPrice != null
+        ? Number(existing.defaultTpPrice)
+        : null;
+    const tpError = validateDefaultTpPrice(mergedCost, mergedTp);
+    if (tpError) {
+      return NextResponse.json({ error: tpError }, { status: 400 });
+    }
 
     const product = await prisma.product.update({
       where: { id },

@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
 import { deductStock } from "@/lib/inventory/khucra";
 import { computeLineProfit } from "@/lib/inventory/avg-cost";
+import { computeLineTpProfit, tpPricePerSmallestUnit } from "@/lib/pricing/tp-pricing";
 import type { Prisma } from "@/generated/prisma/client";
 
 const saleSchema = z.object({
@@ -159,6 +160,11 @@ export async function POST(request: Request) {
         const costPerUnit = Number(product.avgCostPerSmallestUnit);
         const { costTotal, profit } = computeLineProfit(totalQty, lineTotal, costPerUnit);
 
+        const defaultTpPerPackage =
+          product.defaultTpPrice != null ? Number(product.defaultTpPrice) : 0;
+        const tpPerUnit = tpPricePerSmallestUnit(defaultTpPerPackage, product.basePackageSize);
+        const tpLine = computeLineTpProfit(totalQty, lineTotal, tpPerUnit);
+
         return {
           productId: item.productId,
           quantityInSmallestUnit: totalQty,
@@ -173,12 +179,20 @@ export async function POST(request: Request) {
           costPerSmallestUnit: costPerUnit,
           costTotal,
           profit,
+          tpPerSmallestUnit: tpLine?.tpPerSmallestUnit ?? null,
+          tpTotal: tpLine?.tpTotal ?? null,
+          tpProfit: tpLine?.tpProfit ?? null,
         };
       });
 
       const totalAmount = lineItems.reduce((s, i) => s + i.lineTotal, 0);
       const totalCost = lineItems.reduce((s, i) => s + i.costTotal, 0);
       const totalProfit = lineItems.reduce((s, i) => s + i.profit, 0);
+      const tpProfitLines = lineItems.filter((i) => i.tpProfit != null);
+      const totalTpProfit =
+        tpProfitLines.length > 0
+          ? tpProfitLines.reduce((s, i) => s + (i.tpProfit ?? 0), 0)
+          : null;
 
       const salePaid = Math.min(data.paidAmount, totalAmount);
       const dueAmount = Math.max(0, totalAmount - salePaid);
@@ -214,6 +228,7 @@ export async function POST(request: Request) {
           totalAmount,
           totalCost,
           totalProfit,
+          totalTpProfit,
           paidAmount: salePaid,
           dueAmount,
           status,
