@@ -53,7 +53,7 @@ else
   fi
 fi
 
-rm -f "$LOCK_FILE" "$PID_FILE" "$APP_LOCK_FILE" "$AUTO_LOCK"
+rm -f "$LOCK_FILE" "$PID_FILE" "$APP_LOCK_FILE" "$AUTO_LOCK" "${APP_DIR}/.deploy-status"
 systemctl stop newproject-deploy.service 2>/dev/null || true
 systemctl reset-failed newproject-deploy.service 2>/dev/null || true
 echo "Deploy lock cleared."

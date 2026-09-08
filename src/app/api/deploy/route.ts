@@ -1,10 +1,11 @@
 import { createHash, timingSafeEqual } from "crypto";
-import { spawn } from "child_process";
-import { existsSync, openSync, readFileSync } from "fs";
+import { spawn, spawnSync } from "child_process";
+import { existsSync, openSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { tailDeployLog } from "@/lib/deploy/log-tail";
 import { ensureDeployLogDir, writeDeployStatus } from "@/lib/deploy/status";
+import { isStaleActiveDeploy } from "@/lib/deploy/stale";
 
 function normalizeSecret(value: string | undefined): string {
   return (value ?? "").trim().replace(/^["']|["']$/g, "");
@@ -52,6 +53,24 @@ export async function POST(request: NextRequest) {
       { error: "Deploy scripts are missing on the server" },
       { status: 503 }
     );
+  }
+
+  const appDir = process.cwd();
+  const statusPath = join(appDir, ".deploy-status");
+  if (existsSync(statusPath)) {
+    try {
+      const deployStatus = JSON.parse(readFileSync(statusPath, "utf8")) as Record<string, string>;
+      if (isStaleActiveDeploy(deployStatus)) {
+        unlinkSync(statusPath);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const prepareScript = join(appDir, "deploy/pre-webhook-prepare.sh");
+  if (existsSync(prepareScript)) {
+    spawnSync("bash", [prepareScript], { cwd: appDir, stdio: "ignore" });
   }
 
   async function isHealthyAtSha(sha: string): Promise<boolean> {

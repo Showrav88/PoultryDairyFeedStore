@@ -31,6 +31,12 @@ sync_from_origin() {
 
 if [[ "$(id -u)" -eq 0 ]]; then
   chown -R "${APP_USER}:${APP_USER}" "$APP_DIR" 2>/dev/null || true
+  # Clear orphan locks before sync (uses installed lock helpers when present).
+  rm -f /var/lock/newproject-deploy.pid /var/lock/newproject-deploy.lock "${APP_DIR}/.deploy.lock" 2>/dev/null || true
+  if [[ -x "${APP_DIR}/deploy/unlock-deploy.sh" ]]; then
+    bash "${APP_DIR}/deploy/unlock-deploy.sh" --force 2>/dev/null || \
+      bash "${APP_DIR}/deploy/unlock-deploy.sh" 2>/dev/null || true
+  fi
   if [[ -x "$SYNC_BIN" ]]; then
     "$SYNC_BIN" "$APP_DIR" "$BRANCH"
   else

@@ -11,15 +11,33 @@ STALE_ACTIVE_SEC="${NEWPROJECT_STALE_ACTIVE_SEC:-180}"
 # True when a deploy process is actually running (not a stuck systemd unit alone).
 newproject_deploy_process_running() {
   if [[ -f "$NEWPROJECT_ROOT_PID" ]]; then
-    local pid
+    local pid cmd
     pid="$(tr -d '[:space:]' < "$NEWPROJECT_ROOT_PID" 2>/dev/null || true)"
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      return 0
+      cmd="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+      if [[ "$cmd" == *deploy-newproject* || "$cmd" == *deploy-newproject.sh* ]]; then
+        return 0
+      fi
+      rm -f "$NEWPROJECT_ROOT_PID"
+    else
+      rm -f "$NEWPROJECT_ROOT_PID"
     fi
   fi
 
-  pgrep -af '/usr/local/sbin/deploy-newproject|deploy/deploy-newproject\.sh|deploy-via-app\.sh|scripts/hostinger/deploy\.sh|trigger-newproject-deploy' \
-    >/dev/null 2>&1
+  local pid cmd
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    cmd="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+    [[ -z "$cmd" ]] && continue
+    [[ "$cmd" == *webhook-deploy* ]] && continue
+    [[ "$cmd" == *pre-webhook-prepare* ]] && continue
+    [[ "$cmd" == *pgrep* ]] && continue
+    if [[ "$cmd" == *deploy-newproject* || "$cmd" == *deploy-newproject.sh* || "$cmd" == *trigger-newproject-deploy* ]]; then
+      return 0
+    fi
+  done < <(pgrep -f '/usr/local/sbin/deploy-newproject|deploy/deploy-newproject\.sh|trigger-newproject-deploy' 2>/dev/null || true)
+
+  return 1
 }
 
 # Clear stuck .deploy-status (running/started with no live process).
