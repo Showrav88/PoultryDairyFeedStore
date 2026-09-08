@@ -60,6 +60,10 @@ launch_root_deploy() {
 
 echo "=== webhook-deploy $(date -Is) TARGET_SHA=${TARGET_SHA:-unknown} user=$(whoami) pid=$$ ==="
 
+if [[ -x "${APP_DIR}/deploy/pre-webhook-prepare.sh" ]]; then
+  bash "${APP_DIR}/deploy/pre-webhook-prepare.sh" || true
+fi
+
 # shellcheck disable=SC1091
 source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
 if type newproject_clear_stale_deploy_locks >/dev/null 2>&1; then

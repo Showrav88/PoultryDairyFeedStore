@@ -23,16 +23,26 @@ log() {
 
 log "=== run start (branch=${BRANCH}) ==="
 
+git -C "$APP_DIR" config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+
+# Sync deploy scripts from GitHub FIRST so lock helpers self-heal without SSH.
+log "git fetch origin/${BRANCH} (refresh deploy scripts) ..."
+git -C "$APP_DIR" fetch origin "$BRANCH"
+git -C "$APP_DIR" reset --hard "origin/${BRANCH}"
+git -C "$APP_DIR" clean -fd \
+  -e .env -e .env.local -e node_modules -e .next -e logs \
+  -e .deploy-sha -e .deploy-status -e .deploy.lock -e src/generated
+
 # shellcheck disable=SC1091
 source "${APP_DIR}/deploy/deploy-lock.sh"
+
+if newproject_clear_stale_deploy_locks; then
+  log "Cleared stale deploy locks/status (no active process)"
+fi
 
 if newproject_deploy_process_running; then
   log "Deploy process active — skip"
   exit 0
-fi
-
-if newproject_clear_stale_deploy_locks; then
-  log "Cleared stale deploy locks/status (no active process)"
 fi
 
 exec 9>"$AUTO_LOCK"
@@ -40,11 +50,6 @@ if ! flock -n 9; then
   log "Another auto-deploy instance running — skip"
   exit 0
 fi
-
-git -C "$APP_DIR" config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
-
-log "git fetch origin/${BRANCH} ..."
-git -C "$APP_DIR" fetch origin "$BRANCH"
 
 LOCAL_SHA="$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || echo "")"
 REMOTE_SHA="$(git -C "$APP_DIR" rev-parse "origin/${BRANCH}" 2>/dev/null || echo "")"
@@ -64,15 +69,16 @@ if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
     exit 0
   fi
   log "Git already at ${REMOTE_SHA:0:7} but live app is ${LIVE_SHA:-unknown} — retry deploy"
+else
+  log "Change detected ${LOCAL_SHA:0:7} -> ${REMOTE_SHA:0:7} — running ${DEPLOY_CMD}"
 fi
-
-log "Change detected ${LOCAL_SHA:0:7} -> ${REMOTE_SHA:0:7} — running ${DEPLOY_CMD}"
 
 if [[ ! -x "$DEPLOY_CMD" ]]; then
   log "ERROR: missing ${DEPLOY_CMD} — run once on VPS: sudo bash ${APP_DIR}/deploy/bootstrap-vps-git.sh"
   exit 1
 fi
 
+export NEWPROJECT_GIT_SYNCED=1
 if [[ "$(id -u)" -eq 0 ]]; then
   "$DEPLOY_CMD"
 else

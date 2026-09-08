@@ -44,19 +44,34 @@ jobs:
           fire_webhook() {
             webhook_fires=$((webhook_fires + 1))
             echo "Webhook attempt ${webhook_fires} (commit ${short_github_sha}) ..."
-            response=$(curl -sS --connect-timeout 15 --max-time 45 -w "\nHTTP_CODE:%{http_code}" -X POST "$VPS_DEPLOY_URL" \
-              -H "Authorization: Bearer ${DEPLOY_WEBHOOK_SECRET}" \
-              -H "Content-Type: application/json" \
-              -d "{\"ref\":\"${GITHUB_REF}\",\"sha\":\"${GITHUB_SHA}\"}" || true)
+            local attempt_num=1
+            local response="" code="" body=""
+            while [[ "$attempt_num" -le 3 ]]; do
+              response=$(curl -sS --connect-timeout 30 --max-time 60 -w "\nHTTP_CODE:%{http_code}" -X POST "$VPS_DEPLOY_URL" \
+                -H "Authorization: Bearer ${DEPLOY_WEBHOOK_SECRET}" \
+                -H "Content-Type: application/json" \
+                -d "{\"ref\":\"${GITHUB_REF}\",\"sha\":\"${GITHUB_SHA}\"}" 2>&1 || true)
 
-            body="${response%HTTP_CODE:*}"
-            code="${response##*HTTP_CODE:}"
-            echo "HTTP ${code:-000}"
-            echo "$body"
+              body="${response%HTTP_CODE:*}"
+              code="${response##*HTTP_CODE:}"
+              if [[ "$code" == "202" || "$code" == "200" ]]; then
+                echo "HTTP ${code:-000}"
+                echo "$body"
+                return 0
+              fi
 
-            if [[ "$code" == "202" || "$code" == "200" ]]; then
-              return 0
-            fi
+              if [[ "$body" == *"Timeout"* || "$body" == *"timed out"* || "$code" == "000" ]]; then
+                echo "Webhook transport attempt ${attempt_num}/3 failed (HTTP ${code:-000}) — retrying in 5s ..."
+                sleep 5
+                attempt_num=$((attempt_num + 1))
+                continue
+              fi
+
+              echo "HTTP ${code:-000}"
+              echo "$body"
+              return 1
+            done
+            echo "Webhook failed after 3 transport attempts"
             return 1
           }
 
