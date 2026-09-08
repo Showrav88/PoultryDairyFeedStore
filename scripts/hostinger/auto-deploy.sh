@@ -40,16 +40,13 @@ if newproject_clear_stale_deploy_locks; then
   log "Cleared stale deploy locks/status (no active process)"
 fi
 
-if newproject_deploy_process_running; then
-  log "Deploy process active — skip"
-  exit 0
-fi
-
 exec 9>"$AUTO_LOCK"
 if ! flock -n 9; then
   log "Another auto-deploy instance running — skip"
   exit 0
 fi
+
+# Let deploy-newproject handle duplicate deploy detection (do not skip early on pgrep).
 
 LOCAL_SHA="$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || echo "")"
 REMOTE_SHA="$(git -C "$APP_DIR" rev-parse "origin/${BRANCH}" 2>/dev/null || echo "")"
