@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
-import { formatStockDisplay } from "@/lib/inventory/sell-units";
+import { formatStockDisplay, normalizeAllowedSellUnits } from "@/lib/inventory/sell-units";
 import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
 
 export async function GET(
@@ -85,9 +85,20 @@ export async function PATCH(
       return NextResponse.json({ error: tpError }, { status: 400 });
     }
 
+    const weightUnit = data.weightUnit ?? existing.weightUnit;
+    const basePackageSize = data.basePackageSize ?? existing.basePackageSize;
+    const allowedSellUnits = normalizeAllowedSellUnits(
+      weightUnit,
+      basePackageSize,
+      data.allowedSellUnits ?? existing.allowedSellUnits
+    );
+
     const product = await prisma.product.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        allowedSellUnits,
+      },
     });
 
     await logAudit(session.shopId, "PRODUCT", id, "UPDATE", `Product "${product.name}" updated`, existing, product);
