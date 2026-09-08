@@ -55,8 +55,15 @@ if [[ -z "$LOCAL_SHA" || -z "$REMOTE_SHA" ]]; then
 fi
 
 if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
-  log "No change on origin/${BRANCH} (${LOCAL_SHA:0:7}) — skip deploy"
-  exit 0
+  LIVE_SHA=""
+  if [[ -f "${APP_DIR}/.deploy-sha" ]]; then
+    LIVE_SHA="$(tr -d '[:space:]' < "${APP_DIR}/.deploy-sha" 2>/dev/null || true)"
+  fi
+  if [[ -n "$LIVE_SHA" && "${LIVE_SHA:0:7}" == "${REMOTE_SHA:0:7}" ]]; then
+    log "No change on origin/${BRANCH} and app at ${LIVE_SHA:0:7} — skip deploy"
+    exit 0
+  fi
+  log "Git already at ${REMOTE_SHA:0:7} but live app is ${LIVE_SHA:-unknown} — retry deploy"
 fi
 
 log "Change detected ${LOCAL_SHA:0:7} -> ${REMOTE_SHA:0:7} — running ${DEPLOY_CMD}"
