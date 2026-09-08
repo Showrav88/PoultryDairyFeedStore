@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildLegacyTpConversion,
+  canApplyLegacyTp,
   computeLineTpProfit,
   computePurchaseLineTpTotal,
   getPurchasePayableTotal,
@@ -90,5 +92,50 @@ describe("resolvePurchasePricingModel", () => {
 
   it("returns LEGACY when no TP", () => {
     expect(resolvePurchasePricingModel([{ tpPricePerUnit: 0 }])).toBe("LEGACY");
+  });
+});
+
+describe("canApplyLegacyTp", () => {
+  it("allows legacy purchases with open due", () => {
+    expect(canApplyLegacyTp({ pricingModel: "LEGACY", dueAmount: 5000 })).toBe(true);
+  });
+
+  it("rejects DUAL or zero due", () => {
+    expect(canApplyLegacyTp({ pricingModel: "DUAL", dueAmount: 5000 })).toBe(false);
+    expect(canApplyLegacyTp({ pricingModel: "LEGACY", dueAmount: 0 })).toBe(false);
+  });
+});
+
+describe("buildLegacyTpConversion", () => {
+  const lines = [
+    { itemId: "a", costPricePerUnit: 2500, quantity: 10, tpPricePerUnit: 2550 },
+    { itemId: "b", costPricePerUnit: 2400, quantity: 5, tpPricePerUnit: 2450 },
+  ];
+
+  it("computes TP total and new due from paid amount", () => {
+    const result = buildLegacyTpConversion(lines, 10000);
+    expect(result.totalTpAmount).toBe(37750);
+    expect(result.newDue).toBe(27750);
+    expect(result.newStatus).toBe("PARTIAL");
+    expect(result.lineUpdates).toHaveLength(2);
+  });
+
+  it("marks PAID when paid covers TP total", () => {
+    const result = buildLegacyTpConversion(lines, 37750);
+    expect(result.newDue).toBe(0);
+    expect(result.newStatus).toBe("PAID");
+  });
+
+  it("rejects TP below cost", () => {
+    expect(() =>
+      buildLegacyTpConversion(
+        [{ itemId: "a", costPricePerUnit: 2500, quantity: 1, tpPricePerUnit: 2400 }],
+        0
+      )
+    ).toThrow(/at least/);
+  });
+
+  it("rejects paid exceeding TP total", () => {
+    expect(() => buildLegacyTpConversion(lines, 40000)).toThrow(/exceeds/);
   });
 });

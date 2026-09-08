@@ -24,6 +24,22 @@ interface PurchaseItem {
   tpPricePerUnit: number;
   tpPriceTotal: number;
 }
+interface PurchaseItemRow {
+  id: string;
+  quantity: number;
+  costPricePerUnit: number;
+  costPriceTotal: number;
+  tpPricePerUnit?: number | null;
+  tpPriceTotal?: number | null;
+  product: { id: string; name: string; defaultTpPrice?: number | null };
+}
+interface LegacyTpLine {
+  itemId: string;
+  productName: string;
+  quantity: number;
+  costPricePerUnit: number;
+  tpPricePerUnit: number;
+}
 interface Purchase {
   id: string;
   totalCost: number;
@@ -35,12 +51,7 @@ interface Purchase {
   status: string;
   createdAt: string;
   buyer: { name: string };
-  items: {
-    product: { name: string };
-    quantity: number;
-    costPriceTotal: number;
-    tpPriceTotal?: number | null;
-  }[];
+  items: PurchaseItemRow[];
 }
 
 function payableTotal(p: Pick<Purchase, "pricingModel" | "totalCost" | "totalTpAmount" | "payableTotal">) {
@@ -64,6 +75,8 @@ export default function PurchasesPage() {
   const [loading, setLoading] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [editPaidAmount, setEditPaidAmount] = useState(0);
+  const [legacyTpPurchase, setLegacyTpPurchase] = useState<Purchase | null>(null);
+  const [legacyTpLines, setLegacyTpLines] = useState<LegacyTpLine[]>([]);
 
   const loadPurchases = () =>
     fetch("/api/purchases").then((r) => r.json()).then((d) => setPurchases(d.purchases ?? []));
@@ -221,6 +234,65 @@ export default function PurchasesPage() {
         close();
       }
     }, { message: `Update paid amount to ${formatCurrency(editPaidAmount)}?` });
+  };
+
+  const openLegacyTpModal = (purchase: Purchase) => {
+    setLegacyTpPurchase(purchase);
+    setLegacyTpLines(
+      purchase.items.map((item) => ({
+        itemId: item.id,
+        productName: item.product.name,
+        quantity: item.quantity,
+        costPricePerUnit: item.costPricePerUnit,
+        tpPricePerUnit:
+          Number(item.product.defaultTpPrice ?? 0) ||
+          item.costPricePerUnit,
+      }))
+    );
+  };
+
+  const legacyTpTotal = legacyTpLines.reduce(
+    (s, l) => s + l.quantity * (Number(l.tpPricePerUnit) || 0),
+    0
+  );
+  const legacyTpValid =
+    legacyTpLines.length > 0 &&
+    legacyTpLines.every(
+      (l) =>
+        l.tpPricePerUnit > 0 &&
+        l.costPricePerUnit > 0 &&
+        l.tpPricePerUnit >= l.costPricePerUnit
+    );
+
+  const handleApplyLegacyTp = () => {
+    if (!legacyTpPurchase || !legacyTpValid) return;
+    const paid = Number(legacyTpPurchase.paidAmount);
+    confirm(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/purchases/${legacyTpPurchase.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            legacyTpItems: legacyTpLines.map((l) => ({
+              itemId: l.itemId,
+              tpPricePerUnit: l.tpPricePerUnit,
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        setLegacyTpPurchase(null);
+        setLegacyTpLines([]);
+        loadPurchases();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Update failed");
+      } finally {
+        setLoading(false);
+        close();
+      }
+    }, {
+      message: `${t.purchases.legacyTpConfirm} ${t.purchases.supplierPayable}: ${formatCurrency(legacyTpTotal)} · ${t.common.due}: ${formatCurrency(Math.max(0, legacyTpTotal - paid))}`,
+    });
   };
 
   const selectedBuyer = selectedBuyerData ?? buyers.find((b) => b.id === buyerId) ?? null;
@@ -433,6 +505,16 @@ export default function PurchasesPage() {
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
                 <span>{t.common.paid}: <strong>{formatCurrency(p.paidAmount)}</strong></span>
                 <span>{t.common.due}: <strong className="text-orange-600">{formatCurrency(p.dueAmount)}</strong></span>
+                {p.pricingModel === "LEGACY" && p.dueAmount > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="min-h-9 border-emerald-300 text-emerald-800"
+                    onClick={() => openLegacyTpModal(p)}
+                  >
+                    {t.purchases.setLegacyTp}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -442,7 +524,7 @@ export default function PurchasesPage() {
                     setEditPaidAmount(Number(p.paidAmount));
                   }}
                 >
-                  <Pencil size={14} /> Update Payment
+                  <Pencil size={14} /> {t.purchases.updatePayment}
                 </Button>
               </div>
             </div>
@@ -455,7 +537,7 @@ export default function PurchasesPage() {
         <div className="fixed inset-0 z-[70] flex items-end justify-center p-3 sm:items-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setEditingPurchase(null)} />
           <div className="relative z-10 w-full max-w-md rounded-2xl bg-[var(--card)] p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">Update Payment</h3>
+            <h3 className="text-lg font-semibold">{t.purchases.updatePayment}</h3>
             <p className="mt-1 text-sm text-gray-500">{editingPurchase.buyer.name}</p>
             <p className="text-sm">
               {editingPurchase.pricingModel === "DUAL"
@@ -481,6 +563,61 @@ export default function PurchasesPage() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <Button variant="outline" className="min-h-11" onClick={() => setEditingPurchase(null)}>{t.common.cancel}</Button>
               <Button className="min-h-11" onClick={handleUpdatePayment}>{t.common.save}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {legacyTpPurchase && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center p-3 sm:items-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setLegacyTpPurchase(null)} />
+          <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-[var(--card)] p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{t.purchases.legacyTpTitle}</h3>
+            <p className="mt-1 text-sm text-gray-500">{legacyTpPurchase.buyer.name}</p>
+            <p className="mt-2 text-sm text-[var(--info-text)]">{t.purchases.legacyTpHelp}</p>
+            <p className="mt-2 text-sm">
+              {t.purchases.bookCost}: {formatCurrency(legacyTpPurchase.totalCost)} ·{" "}
+              {t.common.paid}: {formatCurrency(legacyTpPurchase.paidAmount)}
+            </p>
+            <div className="mt-4 space-y-3">
+              {legacyTpLines.map((line, idx) => (
+                <div key={line.itemId} className="rounded-lg border border-[var(--border)] p-3">
+                  <p className="text-sm font-medium">{line.productName}</p>
+                  <p className="text-xs text-gray-500">
+                    {line.quantity} bags · {t.purchases.costPerUnit}: {formatCurrency(line.costPricePerUnit)}
+                  </p>
+                  <div className="mt-2">
+                    <Label>{t.purchases.tpPerUnit}</Label>
+                    <NumberInput
+                      placeholder={t.common.enterPrice}
+                      value={line.tpPricePerUnit}
+                      onChange={(v) => {
+                        const updated = [...legacyTpLines];
+                        updated[idx] = { ...line, tpPricePerUnit: v };
+                        setLegacyTpLines(updated);
+                      }}
+                    />
+                    {line.tpPricePerUnit > 0 && line.tpPricePerUnit < line.costPricePerUnit && (
+                      <p className="mt-1 text-xs text-red-600">{t.purchases.tpMustBeAtLeastCost}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-sm">
+              {t.purchases.supplierPayable}: <strong>{formatCurrency(legacyTpTotal)}</strong> ·{" "}
+              {t.common.due}:{" "}
+              <strong className="text-orange-600">
+                {formatCurrency(Math.max(0, legacyTpTotal - Number(legacyTpPurchase.paidAmount)))}
+              </strong>
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Button variant="outline" className="min-h-11" onClick={() => setLegacyTpPurchase(null)}>
+                {t.common.cancel}
+              </Button>
+              <Button className="min-h-11" onClick={handleApplyLegacyTp} disabled={!legacyTpValid || loading}>
+                {t.common.save}
+              </Button>
             </div>
           </div>
         </div>

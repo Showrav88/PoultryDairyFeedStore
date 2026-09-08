@@ -101,6 +101,10 @@ fi
 if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/trigger-newproject-deploy.sh" ]]; then
   install -m 755 "${APP_DIR}/deploy/trigger-newproject-deploy.sh" /usr/local/sbin/trigger-newproject-deploy
 fi
+if [[ "$(id -u)" -eq 0 && -f "${APP_DIR}/deploy/nginx-newproject.conf" ]]; then
+  install -m 644 "${APP_DIR}/deploy/nginx-newproject.conf" /etc/nginx/sites-available/newproject
+  ln -sf /etc/nginx/sites-available/newproject /etc/nginx/sites-enabled/newproject 2>/dev/null || true
+fi
 
 if [[ -f "$PID_FILE" ]]; then
   OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
@@ -184,6 +188,10 @@ for attempt in {1..60}; do
     echo "$SHA" | sudo -u newproject tee "$APP_DIR/.deploy-sha" >/dev/null
     write_status "ready" "$SHA" "Deployment healthy"
     echo "Deployment healthy: $SHA"
+    if [[ "$(id -u)" -eq 0 && -f /etc/nginx/sites-available/newproject ]]; then
+      nginx -t && systemctl reload nginx
+      echo "Nginx reloaded (maintenance page + proxy)"
+    fi
     exit 0
   fi
   echo "Health check attempt ${attempt}/60 ..."
