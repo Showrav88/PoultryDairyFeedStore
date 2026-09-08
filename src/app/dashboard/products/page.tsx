@@ -9,6 +9,9 @@ import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency } from "@/lib/utils";
 import {
   PRODUCT_TYPE_TEMPLATES,
+  buildSellUnitOptions,
+  formatSellUnitLabel,
+  generateFeedAllowedSellUnits,
   getSellPresets,
   gramsToDisplayKg,
   kgToGrams,
@@ -79,6 +82,19 @@ export default function ProductsPage() {
 
   const load = () => fetch("/api/products").then((r) => r.json()).then((d) => setProducts(d.products ?? []));
   useEffect(() => { load(); }, []);
+
+  const effectivePackageSize =
+    packageSize > 0
+      ? packageSize
+      : tpl.defaultBagSizeKg ?? tpl.defaultBottleMl ?? tpl.basePackageSize;
+
+  const basePackageGrams = packageToBaseSize(tpl.weightUnit, effectivePackageSize);
+
+  useEffect(() => {
+    if (productType === "feed_bag" && packageSize > 0) {
+      setAllowedSellUnits(generateFeedAllowedSellUnits(basePackageGrams));
+    }
+  }, [productType, packageSize, basePackageGrams]);
 
   const applyTemplate = (key: ProductTypeKey) => {
     const template = PRODUCT_TYPE_TEMPLATES[key];
@@ -168,12 +184,15 @@ export default function ProductsPage() {
     }, { message: `Delete product "${p.name}"?` });
   };
 
-  const effectivePackageSize =
-    packageSize > 0
-      ? packageSize
-      : tpl.defaultBagSizeKg ?? tpl.defaultBottleMl ?? tpl.basePackageSize;
-
   const presets = getSellPresets(tpl.weightUnit, packageToBaseSize(tpl.weightUnit, effectivePackageSize));
+  const sellCounterPreview =
+    productType === "feed_bag" && packageSize > 0
+      ? buildSellUnitOptions({
+          weightUnit: tpl.weightUnit,
+          basePackageSize: basePackageGrams,
+          allowedSellUnits,
+        }).map((u) => formatSellUnitLabel(u, tpl.weightUnit, basePackageGrams))
+      : [];
   const showPackageSize = productType === "feed_bag" || productType === "liquid";
   const productFormValid =
     name.trim().length > 0 &&
@@ -287,22 +306,31 @@ export default function ProductsPage() {
             <div className="md:col-span-2">
               <Label>{t.products.quickSellButtons} *</Label>
               <p className="mb-2 text-xs text-gray-500">{t.products.quickSellHelp}</p>
-              <div className="flex flex-wrap gap-2">
-                {presets.map((p) => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => toggleSellUnit(p.value)}
-                    className={`rounded-full border px-3 py-1 text-xs ${
-                      allowedSellUnits.includes(p.value)
-                        ? "bg-emerald-600 text-white border-emerald-600"
-                        : "border-gray-300 dark:border-gray-600"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
+              {productType === "feed_bag" && packageSize > 0 ? (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-emerald-700">
+                    {t.products.sellCounterPreview}: {sellCounterPreview.join(" → ")}
+                  </p>
+                  <p className="text-xs text-gray-500">{t.products.feedKhucraAutoHelp}</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {presets.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => toggleSellUnit(p.value)}
+                      className={`rounded-full border px-3 py-1 text-xs ${
+                        allowedSellUnits.includes(p.value)
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : "border-gray-300 dark:border-gray-600"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

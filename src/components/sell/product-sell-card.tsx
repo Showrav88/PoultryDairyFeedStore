@@ -3,13 +3,17 @@
 import { useMemo } from "react";
 import { Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label, NumberInput } from "@/components/ui/input";
+import { Label, NumberInput, Select } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency } from "@/lib/utils";
 import {
+  buildSellUnitOptions,
   formatSellUnitLabel,
-  getKhucraSellUnits,
+  getCustomUnitOptions,
+  getDefaultSellUnitSize,
+  parseCustomSellAmount,
   supportsFullPackageSale,
+  type CustomSellUnit,
 } from "@/lib/inventory/sell-units";
 import { calcUnitPriceFromReference } from "@/lib/inventory/unit-price";
 import {
@@ -37,10 +41,15 @@ export interface SellProduct {
   };
 }
 
+export type SellUnitMode = "preset" | "custom";
+
 export interface ProductCardState {
+  mode: SellUnitMode;
   unitSize: number;
   unitCount: number;
   pricePerUnit: number;
+  customAmount: number;
+  customUnit: CustomSellUnit;
 }
 
 interface ProductSellCardProps {
@@ -53,10 +62,18 @@ interface ProductSellCardProps {
   onStockError: (msg: string) => void;
 }
 
+export function resolveSellUnitSize(state: ProductCardState): number {
+  if (state.mode === "custom") {
+    return parseCustomSellAmount(state.customAmount, state.customUnit);
+  }
+  return state.unitSize;
+}
+
 export function getDefaultProductState(product: SellProduct): ProductCardState {
-  const units = getSellUnitOptions(product);
-  const unitSize = units[0] ?? product.allowedSellUnits[0] ?? product.basePackageSize;
+  const unitSize = getDefaultSellUnitSize(product);
+  const customOptions = getCustomUnitOptions(product.weightUnit);
   return {
+    mode: "preset",
     unitSize,
     unitCount: 1,
     pricePerUnit: calcUnitPriceFromReference(
@@ -64,23 +81,13 @@ export function getDefaultProductState(product: SellProduct): ProductCardState {
       unitSize,
       product.basePackageSize
     ),
+    customAmount: 1,
+    customUnit: customOptions[0]?.value ?? "KG",
   };
 }
 
 export function getSellUnitOptions(product: SellProduct): number[] {
-  const khucra = getKhucraSellUnits(product.allowedSellUnits, product.basePackageSize);
-  const units = [...khucra];
-  if (
-    supportsFullPackageSale(product.weightUnit) &&
-    product.basePackageSize > 1 &&
-    !units.includes(product.basePackageSize)
-  ) {
-    units.push(product.basePackageSize);
-  }
-  if (units.length === 0 && product.allowedSellUnits.length > 0) {
-    return [...new Set(product.allowedSellUnits)].sort((a, b) => a - b);
-  }
-  return [...new Set(units)].sort((a, b) => a - b);
+  return buildSellUnitOptions(product);
 }
 
 export function ProductSellCard({
@@ -94,15 +101,21 @@ export function ProductSellCard({
 }: ProductSellCardProps) {
   const { t } = useI18n();
   const unitOptions = useMemo(() => getSellUnitOptions(product), [product]);
+  const customUnitOptions = useMemo(
+    () => getCustomUnitOptions(product.weightUnit),
+    [product.weightUnit]
+  );
 
+  const effectiveUnitSize = resolveSellUnitSize(state);
   const available = getAvailableStock(product.inventory.totalStock, cart, product.id);
-  const lineStock = getLineStockAmount(state.unitSize, state.unitCount);
+  const lineStock = getLineStockAmount(effectiveUnitSize, state.unitCount);
   const maxUnitCount =
-    state.unitSize > 0 ? Math.max(1, Math.floor(available / state.unitSize)) : 1;
+    effectiveUnitSize > 0 ? Math.max(1, Math.floor(available / effectiveUnitSize)) : 1;
 
   const selectUnit = (unitSize: number) => {
     onStateChange({
       ...state,
+      mode: "preset",
       unitSize,
       unitCount: 1,
       pricePerUnit: calcUnitPriceFromReference(
@@ -114,6 +127,40 @@ export function ProductSellCard({
     onStockError("");
   };
 
+  const selectCustomMode = () => {
+    const unitSize =
+      effectiveUnitSize > 0
+        ? effectiveUnitSize
+        : parseCustomSellAmount(state.customAmount, state.customUnit);
+    onStateChange({
+      ...state,
+      mode: "custom",
+      unitCount: 1,
+      pricePerUnit: calcUnitPriceFromReference(
+        product.sellPrice,
+        unitSize > 0 ? unitSize : product.basePackageSize,
+        product.basePackageSize
+      ),
+    });
+    onStockError("");
+  };
+
+  const updateCustom = (customAmount: number, customUnit: CustomSellUnit) => {
+    const unitSize = parseCustomSellAmount(customAmount, customUnit);
+    onStateChange({
+      ...state,
+      mode: "custom",
+      customAmount,
+      customUnit,
+      unitCount: 1,
+      pricePerUnit:
+        unitSize > 0
+          ? calcUnitPriceFromReference(product.sellPrice, unitSize, product.basePackageSize)
+          : 0,
+    });
+    onStockError("");
+  };
+
   const lineTotal = state.pricePerUnit * state.unitCount;
 
   const handleAdd = () => {
@@ -121,11 +168,15 @@ export function ProductSellCard({
       onStockError(t.sell.enterSellPrice);
       return;
     }
+    if (effectiveUnitSize <= 0) {
+      onStockError(t.sell.enterSellPrice);
+      return;
+    }
     const check = validateStockForLine(
       product.inventory.totalStock,
       cart,
       product.id,
-      state.unitSize,
+      effectiveUnitSize,
       state.unitCount
     );
     if (!check.ok) {
@@ -152,6 +203,16 @@ export function ProductSellCard({
           <p className="mt-1 text-xs font-medium text-emerald-600">
             {t.sell.availableStock}: {formatStockAmount(available, product.weightUnit)}
           </p>
+          {product.inventory.formattedOpenBag && (
+            <p className="text-xs text-gray-500">
+              {t.sell.openBagTitle}: {product.inventory.formattedOpenBag}
+            </p>
+          )}
+          {product.inventory.closedBags > 0 && (
+            <p className="text-xs text-gray-500">
+              {t.sell.sealedBags}: {product.inventory.closedBags}
+            </p>
+          )}
           {product.sellPrice > 0 && (
             <p className="text-xs text-gray-500">
               {t.sell.referenceBag}: {formatCurrency(product.sellPrice)}
@@ -168,7 +229,7 @@ export function ProductSellCard({
             type="button"
             onClick={() => selectUnit(u)}
             className={`min-h-9 rounded-lg border px-2.5 py-1 text-xs font-medium ${
-              state.unitSize === u
+              state.mode === "preset" && state.unitSize === u
                 ? "border-emerald-600 bg-emerald-600 text-white"
                 : "border-gray-300 dark:border-gray-600"
             }`}
@@ -176,7 +237,40 @@ export function ProductSellCard({
             {formatSellUnitLabel(u, product.weightUnit, product.basePackageSize)}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={selectCustomMode}
+          className={`min-h-9 rounded-lg border px-2.5 py-1 text-xs font-medium ${
+            state.mode === "custom"
+              ? "border-emerald-600 bg-emerald-600 text-white"
+              : "border-gray-300 dark:border-gray-600"
+          }`}
+        >
+          {t.sell.customAmount}
+        </button>
       </div>
+
+      {state.mode === "custom" && (
+        <div className="mb-3 flex gap-2">
+          <NumberInput
+            className="flex-1"
+            placeholder={t.common.enterQty}
+            value={state.customAmount}
+            onChange={(v) => updateCustom(v, state.customUnit)}
+          />
+          <Select
+            className="h-10 w-28"
+            value={state.customUnit}
+            onChange={(e) => updateCustom(state.customAmount, e.target.value as CustomSellUnit)}
+          >
+            {customUnitOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
 
       <div className="mb-3 grid grid-cols-2 gap-2">
         <div>
@@ -225,6 +319,12 @@ export function ProductSellCard({
         </div>
       </div>
 
+      {state.mode === "custom" && effectiveUnitSize > 0 && (
+        <p className="mb-2 text-xs text-gray-500">
+          {formatSellUnitLabel(effectiveUnitSize, product.weightUnit, product.basePackageSize)}
+        </p>
+      )}
+
       {stockError && (
         <p className="mb-2 rounded-lg bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-950/30">
           {stockError}
@@ -239,7 +339,7 @@ export function ProductSellCard({
       <Button
         className="min-h-10 w-full"
         onClick={handleAdd}
-        disabled={available <= 0 || lineStock > available}
+        disabled={available <= 0 || lineStock > available || effectiveUnitSize <= 0}
       >
         <Plus size={16} /> {t.sell.addToCart}
       </Button>

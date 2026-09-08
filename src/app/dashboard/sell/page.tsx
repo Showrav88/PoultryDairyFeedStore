@@ -9,6 +9,7 @@ import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
   ProductSellCard,
   getDefaultProductState,
+  resolveSellUnitSize,
   type ProductCardState,
   type SellProduct,
 } from "@/components/sell/product-sell-card";
@@ -117,8 +118,9 @@ function SellCounterContent() {
 
   const addToCart = (product: SellProduct) => {
     const state = cardStates[product.id] ?? getDefaultProductState(product);
+    const unitSize = resolveSellUnitSize(state);
     const sellUnitLabel = formatSellUnitLabel(
-      state.unitSize,
+      unitSize,
       product.weightUnit,
       product.basePackageSize
     );
@@ -126,7 +128,7 @@ function SellCounterContent() {
     setCart((prev) => {
       const idx = prev.findIndex(
         (i) =>
-          i.productId === product.id && i.quantityInSmallestUnit === state.unitSize
+          i.productId === product.id && i.quantityInSmallestUnit === unitSize
       );
       if (idx >= 0) {
         const next = [...prev];
@@ -142,7 +144,7 @@ function SellCounterContent() {
         {
           productId: product.id,
           productName: product.name,
-          quantityInSmallestUnit: state.unitSize,
+          quantityInSmallestUnit: unitSize,
           sellUnitLabel,
           pricePerUnit: state.pricePerUnit,
           unitCount: state.unitCount,

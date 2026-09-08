@@ -5,6 +5,103 @@ export interface SellPreset {
   value: number;
 }
 
+/** Small gram presets always available on feed khucra. */
+export const FEED_SMALL_PRESETS = [100, 250, 500, 1000] as const;
+
+export function isFeedWeightUnit(weightUnit: string): boolean {
+  return weightUnit === "BAG" || weightUnit === "GRAM" || weightUnit === "KG";
+}
+
+/** Max khucra preset size: 25 kg bag → 20 kg, 50 kg → 30 kg, else bag − 5 kg. */
+export function getKhucraMaxGrams(basePackageSizeGrams: number): number {
+  const kg = basePackageSizeGrams / 1000;
+  if (Math.abs(kg - 25) < 0.01) return 20000;
+  if (Math.abs(kg - 50) < 0.01) return 30000;
+  return Math.max(1000, basePackageSizeGrams - 5000);
+}
+
+/** Khucra-only units for feed (small grams + 5 kg steps up to khucra max). Excludes full bag. */
+export function generateFeedAllowedSellUnits(basePackageSizeGrams: number): number[] {
+  if (basePackageSizeGrams <= 0) return [...FEED_SMALL_PRESETS];
+  const maxKhucra = getKhucraMaxGrams(basePackageSizeGrams);
+  const kgSteps: number[] = [];
+  for (let g = 5000; g <= maxKhucra; g += 5000) {
+    kgSteps.push(g);
+  }
+  return [...FEED_SMALL_PRESETS, ...kgSteps];
+}
+
+export function normalizeAllowedSellUnits(
+  weightUnit: string,
+  basePackageSize: number,
+  provided?: number[]
+): number[] {
+  if (isFeedWeightUnit(weightUnit)) {
+    return generateFeedAllowedSellUnits(basePackageSize);
+  }
+  return provided && provided.length > 0 ? provided : [100, 250, 500, 1000];
+}
+
+function sellUnitsEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort((x, y) => x - y);
+  const sb = [...b].sort((x, y) => x - y);
+  return sa.every((v, i) => v === sb[i]);
+}
+
+export function feedSellUnitsNeedSync(
+  weightUnit: string,
+  basePackageSize: number,
+  allowedSellUnits: number[]
+): boolean {
+  if (!isFeedWeightUnit(weightUnit)) return false;
+  const expected = generateFeedAllowedSellUnits(basePackageSize);
+  return !sellUnitsEqual(allowedSellUnits, expected);
+}
+
+export interface SellUnitProductInput {
+  weightUnit: string;
+  basePackageSize: number;
+  allowedSellUnits: number[];
+}
+
+/** Sell counter order: full bag first, then khucra largest → smallest. */
+export function buildSellUnitOptions(product: SellUnitProductInput): number[] {
+  const khucra = getKhucraSellUnits(product.allowedSellUnits, product.basePackageSize);
+  const options: number[] = [];
+
+  if (
+    supportsFullPackageSale(product.weightUnit) &&
+    product.basePackageSize > 1
+  ) {
+    options.push(product.basePackageSize);
+  }
+
+  const sortedKhucra = [...new Set(khucra)].sort((a, b) => b - a);
+  for (const u of sortedKhucra) {
+    if (!options.includes(u)) options.push(u);
+  }
+
+  if (options.length === 0 && product.allowedSellUnits.length > 0) {
+    const fallback = [...new Set(product.allowedSellUnits)].sort((a, b) => b - a);
+    if (
+      supportsFullPackageSale(product.weightUnit) &&
+      product.basePackageSize > 1 &&
+      !fallback.includes(product.basePackageSize)
+    ) {
+      return [product.basePackageSize, ...fallback];
+    }
+    return fallback;
+  }
+
+  return options;
+}
+
+export function getDefaultSellUnitSize(product: SellUnitProductInput): number {
+  const options = buildSellUnitOptions(product);
+  return options[0] ?? product.basePackageSize;
+}
+
 export const PRODUCT_TYPE_TEMPLATES: Record<
   string,
   {
@@ -23,7 +120,7 @@ export const PRODUCT_TYPE_TEMPLATES: Record<
     weightUnit: "BAG",
     basePackageSize: 50000,
     defaultBagSizeKg: 50,
-    allowedSellUnits: [100, 250, 500, 1000, 2000, 5000, 50000],
+    allowedSellUnits: generateFeedAllowedSellUnits(50000),
   },
   eggs: {
     label: "Eggs / Pieces",
@@ -87,12 +184,17 @@ export function getSellPresets(weightUnit: string, basePackageSize: number): Sel
   switch (weightUnit) {
     case "BAG":
     case "GRAM":
-    case "KG":
-      [100, 250, 500, 1000, 2000, 5000].forEach((v) => presets.push({ label: formatWeight(v), value: v }));
-      if (basePackageSize > 0 && !presets.some((p) => p.value === basePackageSize)) {
-        presets.push({ label: `Full Bag (${formatWeight(basePackageSize)})`, value: basePackageSize });
+    case "KG": {
+      const khucraUnits = generateFeedAllowedSellUnits(basePackageSize);
+      khucraUnits.forEach((v) => presets.push({ label: formatWeight(v), value: v }));
+      if (basePackageSize > 0) {
+        presets.unshift({
+          label: `Full Bag (${formatWeight(basePackageSize)})`,
+          value: basePackageSize,
+        });
       }
       break;
+    }
     case "PIECE":
     case "GENERIC":
       [1, 2, 6, 12, 30].forEach((v) => {

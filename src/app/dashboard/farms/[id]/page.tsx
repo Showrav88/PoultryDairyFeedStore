@@ -13,9 +13,11 @@ import { ANIMAL_TYPE_LABELS } from "@/lib/farms/wallet";
 import { formatIssueLineQuantity, type FarmIssueRow } from "@/lib/farms/issue-display";
 import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
 import {
+  buildSellUnitOptions,
   formatFullPackageLabel,
   formatSellUnitLabel,
   getCustomUnitOptions,
+  getDefaultSellUnitSize,
   getKhucraSellUnits,
   parseCustomSellAmount,
   supportsFullPackageSale,
@@ -406,7 +408,7 @@ export default function FarmDetailPage() {
                   key={p.id}
                   onClick={() => {
                     setSelectedProduct(p);
-                    setSellUnit(p.allowedSellUnits[0] ?? 250);
+                    setSellUnit(getDefaultSellUnitSize(p));
                     setUnitCount(1);
                     setSellMode("khucra");
                     setStockError("");
@@ -459,8 +461,9 @@ export default function FarmDetailPage() {
                 </div>
                 {sellMode === "khucra" && (
                   <div className="flex flex-wrap gap-1">
-                    {getKhucraSellUnits(selectedProduct.allowedSellUnits, selectedProduct.basePackageSize).map(
-                      (u) => (
+                    {getKhucraSellUnits(selectedProduct.allowedSellUnits, selectedProduct.basePackageSize)
+                      .sort((a, b) => b - a)
+                      .map((u) => (
                         <button
                           key={u}
                           onClick={() => setSellUnit(u)}

@@ -6,7 +6,7 @@ import { generateProductId } from "@/lib/utils";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
 import { formatAvgCostPerKg } from "@/lib/inventory/avg-cost";
-import { formatStockDisplay } from "@/lib/inventory/sell-units";
+import { formatStockDisplay, normalizeAllowedSellUnits, feedSellUnitsNeedSync, generateFeedAllowedSellUnits } from "@/lib/inventory/sell-units";
 import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
 
 function enrichProduct(p: {
@@ -59,7 +59,19 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const enriched = products.map((p) => enrichProduct(p));
+  const enriched = await Promise.all(
+    products.map(async (p) => {
+      if (feedSellUnitsNeedSync(p.weightUnit, p.basePackageSize, p.allowedSellUnits)) {
+        const allowedSellUnits = generateFeedAllowedSellUnits(p.basePackageSize);
+        const updated = await prisma.product.update({
+          where: { id: p.id },
+          data: { allowedSellUnits },
+        });
+        return enrichProduct(updated);
+      }
+      return enrichProduct(p);
+    })
+  );
 
   return NextResponse.json({ products: enriched });
 }
@@ -95,6 +107,12 @@ export async function POST(request: Request) {
 
     const productId = generateProductId(data.name, shop.productIdCounter);
 
+    const allowedSellUnits = normalizeAllowedSellUnits(
+      data.weightUnit,
+      data.basePackageSize,
+      data.allowedSellUnits
+    );
+
     const product = await prisma.product.create({
       data: {
         shopId: session.shopId,
@@ -106,7 +124,7 @@ export async function POST(request: Request) {
         sellPrice: data.sellPrice ?? 0,
         defaultCostPrice: data.defaultCostPrice ?? null,
         defaultTpPrice: data.defaultTpPrice ?? null,
-        allowedSellUnits: data.allowedSellUnits ?? [100, 250, 500, 1000],
+        allowedSellUnits,
       },
     });
 
