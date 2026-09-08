@@ -28,8 +28,6 @@ fail() {
 }
 
 deploy_is_live() {
-  # shellcheck disable=SC1091
-  source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
   if type newproject_deploy_process_running >/dev/null 2>&1; then
     newproject_deploy_process_running && return 0
   fi
@@ -63,6 +61,12 @@ launch_root_deploy() {
 echo "=== webhook-deploy $(date -Is) TARGET_SHA=${TARGET_SHA:-unknown} user=$(whoami) pid=$$ ==="
 
 # shellcheck disable=SC1091
+source "${APP_DIR}/deploy/deploy-lock.sh" 2>/dev/null || true
+if type newproject_clear_stale_deploy_locks >/dev/null 2>&1; then
+  newproject_clear_stale_deploy_locks || true
+fi
+
+# shellcheck disable=SC1091
 source "${APP_DIR}/deploy/deploy-health.sh" 2>/dev/null || true
 
 if [[ -n "${TARGET_SHA:-}" ]] && type health_deploy_sha >/dev/null 2>&1 && health_deploy_sha "$TARGET_SHA"; then
@@ -78,8 +82,7 @@ if [[ -n "${TARGET_SHA:-}" && -n "$CURRENT_SHA" && "$CURRENT_SHA" == "$TARGET_SH
 fi
 
 if deploy_is_live; then
-  write_status "running" "${TARGET_SHA:-}" "Deploy already in progress"
-  echo "Deploy process already active — skip duplicate webhook"
+  echo "Deploy process already active — skip duplicate webhook (status unchanged)"
   exit 0
 fi
 
