@@ -9,17 +9,44 @@ import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 interface Buyer { id: string; name: string; phone: string; }
-interface Product { id: string; name: string; productId: string; }
-interface PurchaseItem { productId: string; quantity: number; costPricePerUnit: number; costPriceTotal: number; }
+interface Product {
+  id: string;
+  name: string;
+  productId: string;
+  defaultCostPrice?: number | null;
+  defaultTpPrice?: number | null;
+}
+interface PurchaseItem {
+  productId: string;
+  quantity: number;
+  costPricePerUnit: number;
+  costPriceTotal: number;
+  tpPricePerUnit: number;
+  tpPriceTotal: number;
+}
 interface Purchase {
   id: string;
   totalCost: number;
+  totalTpAmount?: number | null;
+  payableTotal?: number;
+  pricingModel: string;
   paidAmount: number;
   dueAmount: number;
   status: string;
   createdAt: string;
   buyer: { name: string };
-  items: { product: { name: string }; quantity: number; costPriceTotal: number }[];
+  items: {
+    product: { name: string };
+    quantity: number;
+    costPriceTotal: number;
+    tpPriceTotal?: number | null;
+  }[];
+}
+
+function payableTotal(p: Pick<Purchase, "pricingModel" | "totalCost" | "totalTpAmount" | "payableTotal">) {
+  if (p.payableTotal != null) return p.payableTotal;
+  if (p.pricingModel === "DUAL" && p.totalTpAmount != null) return p.totalTpAmount;
+  return p.totalCost;
 }
 
 export default function PurchasesPage() {
@@ -66,37 +93,91 @@ export default function PurchasesPage() {
     setBuyerSearch(`${buyer.name} (${buyer.phone})`);
   };
 
+  const productDefaults = (productId: string) => {
+    const p = products.find((x) => x.id === productId);
+    return {
+      cost: p?.defaultCostPrice ?? 0,
+      tp: p?.defaultTpPrice ?? 0,
+    };
+  };
+
+  const recalcLine = (line: PurchaseItem): PurchaseItem => {
+    const qty = Number(line.quantity) || 0;
+    const costUnit = Number(line.costPricePerUnit) || 0;
+    const tpUnit = Number(line.tpPricePerUnit) || 0;
+    return {
+      ...line,
+      costPriceTotal: qty * costUnit,
+      tpPriceTotal: tpUnit > 0 ? qty * tpUnit : 0,
+    };
+  };
+
   const addItem = () => {
     if (products.length === 0) return;
-    setItems([...items, { productId: products[0].id, quantity: 0, costPricePerUnit: 0, costPriceTotal: 0 }]);
+    const p = products[0];
+    const defaults = productDefaults(p.id);
+    setItems([
+      ...items,
+      recalcLine({
+        productId: p.id,
+        quantity: 0,
+        costPricePerUnit: defaults.cost,
+        costPriceTotal: 0,
+        tpPricePerUnit: defaults.tp,
+        tpPriceTotal: 0,
+      }),
+    ]);
   };
 
   const updateItem = (idx: number, field: keyof PurchaseItem, value: number | string) => {
     const updated = [...items];
-    updated[idx] = { ...updated[idx], [field]: value };
-    if (field === "quantity" || field === "costPricePerUnit") {
-      const qty = Number(updated[idx].quantity) || 0;
-      const unit = Number(updated[idx].costPricePerUnit) || 0;
-      updated[idx].costPriceTotal = qty * unit;
+    let line = { ...updated[idx], [field]: value };
+
+    if (field === "productId") {
+      const defaults = productDefaults(String(value));
+      line = {
+        ...line,
+        costPricePerUnit: defaults.cost,
+        tpPricePerUnit: defaults.tp,
+      };
     }
+
+    updated[idx] = recalcLine(line);
     setItems(updated);
   };
 
   const totalCost = items.reduce((s, i) => s + i.costPriceTotal, 0);
+  const totalTp = items.reduce((s, i) => s + i.tpPriceTotal, 0);
+  const useDualTp = totalTp > 0;
+  const supplierPayable = useDualTp ? totalTp : totalCost;
+
+  const tpLineError = items.some(
+    (i) => i.tpPricePerUnit > 0 && (i.costPricePerUnit <= 0 || i.tpPricePerUnit < i.costPricePerUnit)
+  );
 
   const purchaseFormValid =
     Boolean(buyerId) &&
     items.length > 0 &&
-    items.every((i) => i.quantity > 0 && i.costPricePerUnit > 0);
+    items.every((i) => i.quantity > 0 && i.costPricePerUnit > 0) &&
+    !tpLineError;
 
   const handleCreate = () => {
     confirm(async () => {
       setLoading(true);
       try {
+        const payloadItems = items.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          costPricePerUnit: i.costPricePerUnit,
+          costPriceTotal: i.costPriceTotal,
+          ...(i.tpPricePerUnit > 0
+            ? { tpPricePerUnit: i.tpPricePerUnit, tpPriceTotal: i.tpPriceTotal }
+            : {}),
+        }));
         const res = await fetch("/api/purchases", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ buyerId, paidAmount, items }),
+          body: JSON.stringify({ buyerId, paidAmount, items: payloadItems }),
         });
         if (!res.ok) throw new Error((await res.json()).error);
         setShowForm(false);
@@ -112,11 +193,16 @@ export default function PurchasesPage() {
         setLoading(false);
         close();
       }
-    }, { message: `Create purchase for ${formatCurrency(totalCost)}?` });
+    }, {
+      message: useDualTp
+        ? `Create purchase? Book cost ${formatCurrency(totalCost)}, supplier payable ${formatCurrency(supplierPayable)}`
+        : `Create purchase for ${formatCurrency(totalCost)}?`,
+    });
   };
 
   const handleUpdatePayment = () => {
     if (!editingPurchase) return;
+    const total = payableTotal(editingPurchase);
     confirm(async () => {
       setLoading(true);
       try {
@@ -151,6 +237,7 @@ export default function PurchasesPage() {
       <div className="mb-4 rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] p-4 text-sm text-[var(--info-text)]">
         <p className="font-semibold">How to add stock:</p>
         <p className="mt-1">1. Create product in Products → 2. Add supplier in Suppliers → 3. New Purchase here (qty = number of bags) → 4. Stock appears in Sell Counter</p>
+        <p className="mt-1 opacity-90">{t.purchases.dualPricingHelp}</p>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
@@ -209,14 +296,25 @@ export default function PurchasesPage() {
                 onChange={setPaidAmount}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Total: {formatCurrency(totalCost)} · Due: {formatCurrency(Math.max(0, totalCost - paidAmount))}
+                {useDualTp ? (
+                  <>
+                    {t.purchases.supplierPayable}: {formatCurrency(supplierPayable)} ·{" "}
+                    {t.purchases.bookCost}: {formatCurrency(totalCost)} ·{" "}
+                    {t.common.due}: {formatCurrency(Math.max(0, supplierPayable - paidAmount))}
+                  </>
+                ) : (
+                  <>
+                    {t.common.total}: {formatCurrency(totalCost)} · {t.common.due}:{" "}
+                    {formatCurrency(Math.max(0, totalCost - paidAmount))}
+                  </>
+                )}
               </p>
             </div>
           </div>
 
           <div className="mb-4 mt-4 space-y-2">
             {items.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="sm:col-span-2">
                   <Label>{t.purchases.selectProduct}</Label>
                   <Select
@@ -246,15 +344,32 @@ export default function PurchasesPage() {
                     value={item.costPricePerUnit}
                     onChange={(v) => updateItem(idx, "costPricePerUnit", v)}
                   />
-                  {item.costPricePerUnit > 0 && item.quantity > 0 && (
-                    <p className="mt-1 text-xs text-[var(--muted)]">
-                      Line: {item.quantity} × {formatCurrency(item.costPricePerUnit)} = {formatCurrency(item.costPriceTotal)}
-                    </p>
+                </div>
+                <div>
+                  <Label>{t.purchases.tpPerUnit}</Label>
+                  <NumberInput
+                    placeholder={t.common.enterPrice}
+                    value={item.tpPricePerUnit}
+                    onChange={(v) => updateItem(idx, "tpPricePerUnit", v)}
+                  />
+                  {item.tpPricePerUnit > 0 && item.tpPricePerUnit < item.costPricePerUnit && (
+                    <p className="mt-1 text-xs text-red-600">{t.purchases.tpMustBeAtLeastCost}</p>
                   )}
                 </div>
-                <div className="flex min-h-10 items-center justify-between gap-2 sm:col-span-2 lg:col-span-1">
-                  <span className="text-sm font-medium">{formatCurrency(item.costPriceTotal)}</span>
-                  <button className="flex min-h-11 min-w-11 items-center justify-center" onClick={() => setItems(items.filter((_, i) => i !== idx))}>
+                <div className="flex min-h-10 flex-col justify-center gap-1 sm:col-span-2 lg:col-span-1">
+                  <span className="text-xs text-gray-500">
+                    {t.purchases.costTotal}: {formatCurrency(item.costPriceTotal)}
+                  </span>
+                  {item.tpPriceTotal > 0 && (
+                    <span className="text-xs text-emerald-700">
+                      {t.purchases.tpTotal}: {formatCurrency(item.tpPriceTotal)}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="flex min-h-9 w-9 items-center justify-center self-end"
+                    onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                  >
                     <Trash2 size={16} className="text-red-500" />
                   </button>
                 </div>
@@ -266,49 +381,73 @@ export default function PurchasesPage() {
             <Button className="min-h-11" variant="outline" onClick={addItem} disabled={products.length === 0}>
               <Plus size={16} /> {t.purchases.addItem}
             </Button>
-            <span className="font-bold sm:ml-auto text-[var(--foreground)]">{t.common.total}: {formatCurrency(totalCost)}</span>
+            <div className="text-right sm:ml-auto">
+              <p className="text-sm text-gray-500">
+                {t.purchases.bookCost}: <strong>{formatCurrency(totalCost)}</strong>
+              </p>
+              {useDualTp && (
+                <p className="font-bold text-[var(--foreground)]">
+                  {t.purchases.supplierPayable}: {formatCurrency(supplierPayable)}
+                </p>
+              )}
+              {!useDualTp && (
+                <p className="font-bold text-[var(--foreground)]">{t.common.total}: {formatCurrency(totalCost)}</p>
+              )}
+            </div>
             <Button className="min-h-11" onClick={handleCreate} disabled={!purchaseFormValid || loading}>{t.common.save}</Button>
           </div>
         </div>
       )}
 
       <div className="space-y-3">
-        {purchases.map((p) => (
-          <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <div className="flex justify-between items-start gap-3">
-              <div>
-                <p className="font-semibold">{p.buyer.name}</p>
-                <p className="text-xs text-gray-500">{formatDateTime(p.createdAt, locale)}</p>
+        {purchases.map((p) => {
+          const payTotal = payableTotal(p);
+          const isDual = p.pricingModel === "DUAL" && p.totalTpAmount != null;
+          return (
+            <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+              <div className="flex justify-between items-start gap-3">
+                <div>
+                  <p className="font-semibold">{p.buyer.name}</p>
+                  <p className="text-xs text-gray-500">{formatDateTime(p.createdAt, locale)}</p>
+                  {isDual && (
+                    <p className="text-xs text-emerald-700">{t.purchases.dualPricingBadge}</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <p className="font-bold">{formatCurrency(payTotal)}</p>
+                  {isDual && (
+                    <p className="text-xs text-gray-500">
+                      {t.purchases.bookCost}: {formatCurrency(p.totalCost)}
+                    </p>
+                  )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    p.status === "PAID" ? "bg-emerald-100 text-emerald-700" :
+                    p.status === "PARTIAL" ? "bg-orange-100 text-orange-700" :
+                    "bg-red-100 text-red-700"
+                  }`}>{p.status}</span>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="font-bold">{formatCurrency(p.totalCost)}</p>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  p.status === "PAID" ? "bg-emerald-100 text-emerald-700" :
-                  p.status === "PARTIAL" ? "bg-orange-100 text-orange-700" :
-                  "bg-red-100 text-red-700"
-                }`}>{p.status}</span>
+              <div className="mt-2 text-sm text-gray-500">
+                {p.items.map((i) => `${i.product.name} ×${i.quantity} bags`).join(", ")}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <span>{t.common.paid}: <strong>{formatCurrency(p.paidAmount)}</strong></span>
+                <span>{t.common.due}: <strong className="text-orange-600">{formatCurrency(p.dueAmount)}</strong></span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-h-9"
+                  onClick={() => {
+                    setEditingPurchase(p);
+                    setEditPaidAmount(Number(p.paidAmount));
+                  }}
+                >
+                  <Pencil size={14} /> Update Payment
+                </Button>
               </div>
             </div>
-            <div className="mt-2 text-sm text-gray-500">
-              {p.items.map((i) => `${i.product.name} ×${i.quantity} bags`).join(", ")}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-              <span>{t.common.paid}: <strong>{formatCurrency(p.paidAmount)}</strong></span>
-              <span>{t.common.due}: <strong className="text-orange-600">{formatCurrency(p.dueAmount)}</strong></span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="min-h-9"
-                onClick={() => {
-                  setEditingPurchase(p);
-                  setEditPaidAmount(Number(p.paidAmount));
-                }}
-              >
-                <Pencil size={14} /> Update Payment
-              </Button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {purchases.length === 0 && <p className="text-center text-gray-500 py-8">{t.common.noData}</p>}
       </div>
 
@@ -318,7 +457,16 @@ export default function PurchasesPage() {
           <div className="relative z-10 w-full max-w-md rounded-2xl bg-[var(--card)] p-5 shadow-xl">
             <h3 className="text-lg font-semibold">Update Payment</h3>
             <p className="mt-1 text-sm text-gray-500">{editingPurchase.buyer.name}</p>
-            <p className="text-sm">Total: {formatCurrency(editingPurchase.totalCost)}</p>
+            <p className="text-sm">
+              {editingPurchase.pricingModel === "DUAL"
+                ? `${t.purchases.supplierPayable}: ${formatCurrency(payableTotal(editingPurchase))}`
+                : `${t.common.total}: ${formatCurrency(editingPurchase.totalCost)}`}
+            </p>
+            {editingPurchase.pricingModel === "DUAL" && (
+              <p className="text-xs text-gray-500">
+                {t.purchases.bookCost}: {formatCurrency(editingPurchase.totalCost)}
+              </p>
+            )}
             <div className="mt-4">
               <Label>{t.common.paid}</Label>
               <NumberInput
@@ -327,7 +475,7 @@ export default function PurchasesPage() {
                 onChange={setEditPaidAmount}
               />
               <p className="mt-1 text-xs text-gray-500">
-                Due after update: {formatCurrency(Math.max(0, Number(editingPurchase.totalCost) - editPaidAmount))}
+                {t.common.due}: {formatCurrency(Math.max(0, payableTotal(editingPurchase) - editPaidAmount))}
               </p>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">

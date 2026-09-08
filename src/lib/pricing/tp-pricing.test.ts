@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   computeLineTpProfit,
+  computePurchaseLineTpTotal,
+  getPurchasePayableTotal,
+  resolvePurchasePricingModel,
   tpPricePerSmallestUnit,
   validateDefaultTpPrice,
+  validatePurchaseTpLine,
 } from "./tp-pricing";
 
 describe("tpPricePerSmallestUnit", () => {
@@ -38,5 +42,53 @@ describe("validateDefaultTpPrice", () => {
   it("allows TP equal to or above cost", () => {
     expect(validateDefaultTpPrice(2500, 2500)).toBeNull();
     expect(validateDefaultTpPrice(2500, 2550)).toBeNull();
+  });
+});
+
+describe("computePurchaseLineTpTotal", () => {
+  it("multiplies qty by TP per package", () => {
+    expect(computePurchaseLineTpTotal(10, 2550)).toBe(25500);
+  });
+});
+
+describe("validatePurchaseTpLine", () => {
+  it("requires cost when TP is set", () => {
+    expect(validatePurchaseTpLine(0, 2550)).toMatch(/cost price/);
+  });
+
+  it("requires TP >= cost", () => {
+    expect(validatePurchaseTpLine(2500, 2400)).toMatch(/at least/);
+  });
+});
+
+describe("getPurchasePayableTotal", () => {
+  it("uses TP total for DUAL purchases", () => {
+    expect(
+      getPurchasePayableTotal({
+        pricingModel: "DUAL",
+        totalCost: 25000,
+        totalTpAmount: 25500,
+      })
+    ).toBe(25500);
+  });
+
+  it("uses cost total for LEGACY purchases", () => {
+    expect(
+      getPurchasePayableTotal({
+        pricingModel: "LEGACY",
+        totalCost: 25000,
+        totalTpAmount: null,
+      })
+    ).toBe(25000);
+  });
+});
+
+describe("resolvePurchasePricingModel", () => {
+  it("returns DUAL when any line has TP", () => {
+    expect(resolvePurchasePricingModel([{ tpPricePerUnit: 2550 }])).toBe("DUAL");
+  });
+
+  it("returns LEGACY when no TP", () => {
+    expect(resolvePurchasePricingModel([{ tpPricePerUnit: 0 }])).toBe("LEGACY");
   });
 });
