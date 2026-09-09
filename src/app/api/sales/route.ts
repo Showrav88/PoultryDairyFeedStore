@@ -6,8 +6,11 @@ import { logAudit } from "@/lib/audit";
 import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
 import { deductStock } from "@/lib/inventory/khucra";
 import { computeLineProfit } from "@/lib/inventory/avg-cost";
+import { calcUnitPriceFromReference } from "@/lib/inventory/unit-price";
 import { computeLineTpProfit, tpPricePerSmallestUnit } from "@/lib/pricing/tp-pricing";
-import type { Prisma } from "@/generated/prisma/client";
+import { isBelowSuggested } from "@/lib/sell/last-price";
+import { validateSaleCheckout } from "@/lib/sell/sale-validation";
+import type { BuyerType, Prisma } from "@/generated/prisma/client";
 
 const saleSchema = z.object({
   farmerId: z.string().optional(),
@@ -111,6 +114,36 @@ export async function POST(request: Request) {
       throw new Error("Cannot link both farmer and customer on the same sale");
     }
 
+    const productsPreflight = await prisma.product.findMany({
+      where: {
+        id: { in: data.items.map((i) => i.productId) },
+        shopId: session.shopId,
+        isActive: true,
+      },
+    });
+    const preflightTotal = data.items.reduce(
+      (s, i) => s + i.pricePerUnit * (i.unitCount ?? 1),
+      0
+    );
+    const checkoutError = validateSaleCheckout({
+      lines: data.items.map((i) => ({
+        productId: i.productId,
+        quantityInSmallestUnit: i.quantityInSmallestUnit,
+        pricePerUnit: i.pricePerUnit,
+        unitCount: i.unitCount,
+      })),
+      products: productsPreflight.map((p) => ({ id: p.id, basePackageSize: p.basePackageSize })),
+      paidAmount: data.paidAmount,
+      totalAmount: preflightTotal,
+      farmerId: data.farmerId,
+      customerId: data.customerId,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+    });
+    if (checkoutError) {
+      return NextResponse.json({ error: checkoutError }, { status: 400 });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       let farmerName: string | undefined;
       if (data.farmerId) {
@@ -155,10 +188,17 @@ export async function POST(request: Request) {
 
       const lineItems = data.items.map((item) => {
         const product = productMap.get(item.productId)!;
-        const totalQty = item.quantityInSmallestUnit * item.unitCount;
+        const unitSize = item.quantityInSmallestUnit;
+        const totalQty = unitSize * item.unitCount;
         const lineTotal = item.pricePerUnit * item.unitCount;
         const costPerUnit = Number(product.avgCostPerSmallestUnit);
         const { costTotal, profit } = computeLineProfit(totalQty, lineTotal, costPerUnit);
+        const suggestedPricePerUnit = calcUnitPriceFromReference(
+          Number(product.sellPrice),
+          unitSize,
+          product.basePackageSize
+        );
+        const belowSuggested = isBelowSuggested(item.pricePerUnit, suggestedPricePerUnit);
 
         const defaultTpPerPackage =
           product.defaultTpPrice != null ? Number(product.defaultTpPrice) : 0;
@@ -168,12 +208,15 @@ export async function POST(request: Request) {
         return {
           productId: item.productId,
           quantityInSmallestUnit: totalQty,
+          sellUnitSize: unitSize,
           sellUnitLabel: formatSellUnitLabel(
-            item.quantityInSmallestUnit,
+            unitSize,
             product.weightUnit,
             product.basePackageSize
           ),
           pricePerUnit: item.pricePerUnit,
+          suggestedPricePerUnit,
+          belowSuggested,
           lineTotal,
           unitCount: item.unitCount,
           costPerSmallestUnit: costPerUnit,
@@ -299,6 +342,48 @@ export async function POST(request: Request) {
         });
       }
 
+      const buyerType: BuyerType | null = data.farmerId
+        ? "FARMER"
+        : customerId
+          ? "CUSTOMER"
+          : null;
+      const buyerId = data.farmerId ?? customerId;
+
+      if (buyerType && buyerId) {
+        for (const item of data.items) {
+          const product = productMap.get(item.productId)!;
+          const sellUnitLabel = formatSellUnitLabel(
+            item.quantityInSmallestUnit,
+            product.weightUnit,
+            product.basePackageSize
+          );
+          await tx.buyerProductLastPrice.upsert({
+            where: {
+              shopId_buyerType_buyerId_productId_unitSizeInSmallestUnit: {
+                shopId: session.shopId,
+                buyerType,
+                buyerId,
+                productId: item.productId,
+                unitSizeInSmallestUnit: item.quantityInSmallestUnit,
+              },
+            },
+            create: {
+              shopId: session.shopId,
+              buyerType,
+              buyerId,
+              productId: item.productId,
+              unitSizeInSmallestUnit: item.quantityInSmallestUnit,
+              sellUnitLabel,
+              pricePerUnit: item.pricePerUnit,
+            },
+            update: {
+              pricePerUnit: item.pricePerUnit,
+              sellUnitLabel,
+            },
+          });
+        }
+      }
+
       return sale;
     });
 
@@ -311,6 +396,25 @@ export async function POST(request: Request) {
       null,
       result
     );
+
+    const belowLines = result.items.filter((i) => i.belowSuggested);
+    if (belowLines.length > 0) {
+      const summary = belowLines
+        .map(
+          (i) =>
+            `${i.product.name} ${i.sellUnitLabel} @ ৳${Number(i.pricePerUnit)} (suggested ৳${Number(i.suggestedPricePerUnit ?? 0)})`
+        )
+        .join("; ");
+      await logAudit(
+        session.shopId,
+        "SALE",
+        result.id,
+        "UPDATE",
+        `Below suggested pricing: ${summary}`,
+        null,
+        { saleId: result.id, lines: belowLines.map((i) => i.id) }
+      );
+    }
 
     return NextResponse.json({ sale: result });
   } catch (err) {

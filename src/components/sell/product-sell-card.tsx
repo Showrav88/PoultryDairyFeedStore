@@ -11,11 +11,17 @@ import {
   formatSellUnitLabel,
   getCustomUnitOptions,
   getDefaultSellUnitSize,
+  isFullPackageUnit,
   parseCustomSellAmount,
-  supportsFullPackageSale,
   type CustomSellUnit,
 } from "@/lib/inventory/sell-units";
 import { calcUnitPriceFromReference } from "@/lib/inventory/unit-price";
+import {
+  isBelowCost,
+  isBelowSuggested,
+  lastPriceKey,
+  resolveUnitSellPrice,
+} from "@/lib/sell/last-price";
 import {
   formatStockAmount,
   getAvailableStock,
@@ -56,6 +62,7 @@ interface ProductSellCardProps {
   product: SellProduct;
   cart: CartLine[];
   state: ProductCardState;
+  lastPriceMap?: Map<string, number>;
   onStateChange: (state: ProductCardState) => void;
   onAddToCart: () => void;
   stockError: string;
@@ -69,18 +76,31 @@ export function resolveSellUnitSize(state: ProductCardState): number {
   return state.unitSize;
 }
 
-export function getDefaultProductState(product: SellProduct): ProductCardState {
+function unitPriceFor(
+  product: SellProduct,
+  unitSize: number,
+  lastPriceMap?: Map<string, number>
+) {
+  return resolveUnitSellPrice({
+    referenceSellPrice: product.sellPrice,
+    unitSize,
+    basePackageSize: product.basePackageSize,
+    lastPricePerUnit: lastPriceMap?.get(lastPriceKey(product.id, unitSize)),
+  });
+}
+
+export function getDefaultProductState(
+  product: SellProduct,
+  lastPriceMap?: Map<string, number>
+): ProductCardState {
   const unitSize = getDefaultSellUnitSize(product);
   const customOptions = getCustomUnitOptions(product.weightUnit);
+  const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap);
   return {
     mode: "preset",
     unitSize,
     unitCount: 1,
-    pricePerUnit: calcUnitPriceFromReference(
-      product.sellPrice,
-      unitSize,
-      product.basePackageSize
-    ),
+    pricePerUnit,
     customAmount: 1,
     customUnit: customOptions[0]?.value ?? "KG",
   };
@@ -94,6 +114,7 @@ export function ProductSellCard({
   product,
   cart,
   state,
+  lastPriceMap,
   onStateChange,
   onAddToCart,
   stockError,
@@ -107,22 +128,27 @@ export function ProductSellCard({
   );
 
   const effectiveUnitSize = resolveSellUnitSize(state);
+  const pricing = unitPriceFor(product, effectiveUnitSize, lastPriceMap);
+  const lastForUnit = lastPriceMap?.get(lastPriceKey(product.id, effectiveUnitSize));
+  const showBelowSuggested = isBelowSuggested(state.pricePerUnit, pricing.suggestedPricePerUnit);
+  const showBelowCost = isBelowCost(
+    state.pricePerUnit,
+    product.inventory.avgCostPerSmallestUnit,
+    effectiveUnitSize
+  );
   const available = getAvailableStock(product.inventory.totalStock, cart, product.id);
   const lineStock = getLineStockAmount(effectiveUnitSize, state.unitCount);
   const maxUnitCount =
     effectiveUnitSize > 0 ? Math.max(1, Math.floor(available / effectiveUnitSize)) : 1;
 
   const selectUnit = (unitSize: number) => {
+    const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap);
     onStateChange({
       ...state,
       mode: "preset",
       unitSize,
       unitCount: 1,
-      pricePerUnit: calcUnitPriceFromReference(
-        product.sellPrice,
-        unitSize,
-        product.basePackageSize
-      ),
+      pricePerUnit,
     });
     onStockError("");
   };
@@ -132,31 +158,31 @@ export function ProductSellCard({
       effectiveUnitSize > 0
         ? effectiveUnitSize
         : parseCustomSellAmount(state.customAmount, state.customUnit);
+    const { pricePerUnit } = unitPriceFor(
+      product,
+      unitSize > 0 ? unitSize : product.basePackageSize,
+      lastPriceMap
+    );
     onStateChange({
       ...state,
       mode: "custom",
       unitCount: 1,
-      pricePerUnit: calcUnitPriceFromReference(
-        product.sellPrice,
-        unitSize > 0 ? unitSize : product.basePackageSize,
-        product.basePackageSize
-      ),
+      pricePerUnit,
     });
     onStockError("");
   };
 
   const updateCustom = (customAmount: number, customUnit: CustomSellUnit) => {
     const unitSize = parseCustomSellAmount(customAmount, customUnit);
+    const { pricePerUnit } =
+      unitSize > 0 ? unitPriceFor(product, unitSize, lastPriceMap) : { pricePerUnit: 0 };
     onStateChange({
       ...state,
       mode: "custom",
       customAmount,
       customUnit,
       unitCount: 1,
-      pricePerUnit:
-        unitSize > 0
-          ? calcUnitPriceFromReference(product.sellPrice, unitSize, product.basePackageSize)
-          : 0,
+      pricePerUnit,
     });
     onStockError("");
   };
@@ -215,7 +241,13 @@ export function ProductSellCard({
           )}
           {product.sellPrice > 0 && (
             <p className="text-xs text-gray-500">
-              {t.sell.referenceBag}: {formatCurrency(product.sellPrice)}
+              {t.sell.suggestedOnly}: {formatCurrency(pricing.suggestedPricePerUnit)} /{" "}
+              {formatSellUnitLabel(effectiveUnitSize, product.weightUnit, product.basePackageSize)}
+            </p>
+          )}
+          {lastForUnit != null && lastForUnit > 0 && (
+            <p className="text-xs text-emerald-700">
+              {t.sell.lastPriceForBuyer}: {formatCurrency(lastForUnit)}
             </p>
           )}
         </div>
@@ -318,6 +350,13 @@ export function ProductSellCard({
           />
         </div>
       </div>
+
+      {showBelowSuggested && (
+        <p className="mb-2 text-xs text-amber-700">{t.sell.belowSuggestedWarning}</p>
+      )}
+      {showBelowCost && (
+        <p className="mb-2 text-xs text-red-600">{t.sell.belowCostWarning}</p>
+      )}
 
       {state.mode === "custom" && effectiveUnitSize > 0 && (
         <p className="mb-2 text-xs text-gray-500">

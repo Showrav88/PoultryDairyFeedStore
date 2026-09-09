@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,15 @@ import {
   type SellProduct,
 } from "@/components/sell/product-sell-card";
 import { SellCartPanel, type CartItem } from "@/components/sell/sell-cart-panel";
-import type { SelectedCustomer } from "@/components/sell/customer-search";
+import {
+  hasTrackedIdentity,
+  type TrackedBuyer,
+} from "@/components/sell/wholesale-buyer-search";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
+import { formatSellUnitLabel, isFullPackageUnit } from "@/lib/inventory/sell-units";
 import { getCartReservedStock } from "@/lib/inventory/cart-stock";
+import { buildLastPriceMap } from "@/lib/sell/last-price";
 
 interface Sale {
   id: string;
@@ -40,13 +44,15 @@ export default function SellCounterPage() {
 function SellCounterContent() {
   const searchParams = useSearchParams();
   const farmerIdParam = searchParams.get("farmerId");
+  const customerIdParam = searchParams.get("customerId");
   const { t, locale } = useI18n();
   const { state: confirmState, confirm, close } = useConfirmDialog();
   const [products, setProducts] = useState<SellProduct[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cardStates, setCardStates] = useState<Record<string, ProductCardState>>({});
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
-  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null);
+  const [trackedBuyer, setTrackedBuyer] = useState<TrackedBuyer | null>(null);
+  const [lastPriceMap, setLastPriceMap] = useState<Map<string, number>>(new Map());
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [paidAmount, setPaidAmount] = useState(0);
@@ -55,38 +61,70 @@ function SellCounterContent() {
   const [searchDate, setSearchDate] = useState("");
   const [searchResults, setSearchResults] = useState<Sale[]>([]);
   const [showSearch, setShowSearch] = useState(false);
-  const [farmerId, setFarmerId] = useState<string | null>(farmerIdParam);
-  const [farmer, setFarmer] = useState<{
-    id: string;
-    name: string;
-    totalDue: number;
-    lifetimeSpend: number;
-    tier: string;
-    tierLabel: string;
-  } | null>(null);
 
-  const loadFarmer = useCallback((id: string) => {
+  const loadBuyerFromFarmer = useCallback((id: string) => {
     fetch(`/api/farmers/${id}`)
       .then((r) => r.json())
       .then((d) => {
         if (!d.farmer) return;
-        setFarmer({
+        setTrackedBuyer({
+          type: "FARMER",
           id: d.farmer.id,
           name: d.farmer.name,
+          phone: d.farmer.phone,
           totalDue: d.farmer.totalDue ?? 0,
           lifetimeSpend: d.farmer.lifetimeSpend ?? 0,
           tier: d.farmer.tier ?? "bronze",
           tierLabel: d.farmer.tierLabel ?? "Bronze",
         });
+        setCustomerName(d.farmer.name);
+        setCustomerPhone(d.farmer.phone);
+      });
+  }, []);
+
+  const loadBuyerFromCustomer = useCallback((id: string) => {
+    fetch(`/api/customers/${id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.customer) return;
+        setTrackedBuyer({
+          type: "CUSTOMER",
+          id: d.customer.id,
+          name: d.customer.name,
+          phone: d.customer.phone,
+          totalDue: d.customer.totalDue ?? 0,
+          lifetimeSpend: d.customer.lifetimeSpend ?? 0,
+          tier: d.customer.tier ?? "bronze",
+          tierLabel: d.customer.tierLabel ?? "Bronze",
+        });
+        setCustomerName(d.customer.name);
+        setCustomerPhone(d.customer.phone);
       });
   }, []);
 
   useEffect(() => {
-    if (farmerIdParam) {
-      setFarmerId(farmerIdParam);
-      loadFarmer(farmerIdParam);
+    if (farmerIdParam) loadBuyerFromFarmer(farmerIdParam);
+    else if (customerIdParam) loadBuyerFromCustomer(customerIdParam);
+  }, [farmerIdParam, customerIdParam, loadBuyerFromFarmer, loadBuyerFromCustomer]);
+
+  const loadLastPrices = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (trackedBuyer?.type === "FARMER") params.set("farmerId", trackedBuyer.id);
+    else if (trackedBuyer?.type === "CUSTOMER") params.set("customerId", trackedBuyer.id);
+    else if (customerPhone.trim().length >= 10) params.set("phone", customerPhone.trim());
+    else {
+      setLastPriceMap(new Map());
+      return;
     }
-  }, [farmerIdParam, loadFarmer]);
+
+    const res = await fetch(`/api/sell/last-prices?${params}`);
+    const data = await res.json();
+    setLastPriceMap(buildLastPriceMap(data.prices ?? []));
+  }, [trackedBuyer, customerPhone]);
+
+  useEffect(() => {
+    loadLastPrices();
+  }, [loadLastPrices]);
 
   const loadProducts = useCallback(() => {
     fetch("/api/products")
@@ -97,13 +135,6 @@ function SellCounterContent() {
           sellPrice: Number(p.sellPrice),
         }));
         setProducts(list);
-        setCardStates((prev) => {
-          const next = { ...prev };
-          for (const p of list) {
-            if (!next[p.id]) next[p.id] = getDefaultProductState(p);
-          }
-          return next;
-        });
       });
   }, []);
 
@@ -114,11 +145,42 @@ function SellCounterContent() {
     return () => window.removeEventListener("focus", onFocus);
   }, [loadProducts]);
 
+  useEffect(() => {
+    if (products.length === 0) return;
+    setCardStates((prev) => {
+      const next: Record<string, ProductCardState> = {};
+      for (const p of products) {
+        next[p.id] = getDefaultProductState(p, lastPriceMap);
+      }
+      return next;
+    });
+  }, [lastPriceMap, products]);
+
   const cartTotal = cart.reduce((s, i) => s + i.pricePerUnit * i.unitCount, 0);
 
+  const fullBagInCart = useMemo(() => {
+    return cart.some((item) => {
+      const product = products.find((p) => p.id === item.productId);
+      if (!product) return false;
+      return isFullPackageUnit(item.quantityInSmallestUnit, product.basePackageSize);
+    });
+  }, [cart, products]);
+
   const addToCart = (product: SellProduct) => {
-    const state = cardStates[product.id] ?? getDefaultProductState(product);
+    const state = cardStates[product.id] ?? getDefaultProductState(product, lastPriceMap);
     const unitSize = resolveSellUnitSize(state);
+
+    if (
+      isFullPackageUnit(unitSize, product.basePackageSize) &&
+      !hasTrackedIdentity(trackedBuyer, customerName, customerPhone)
+    ) {
+      setCardErrors((prev) => ({
+        ...prev,
+        [product.id]: t.sell.fullBagRequiresBuyer,
+      }));
+      return;
+    }
+
     const sellUnitLabel = formatSellUnitLabel(
       unitSize,
       product.weightUnit,
@@ -156,6 +218,7 @@ function SellCounterContent() {
       const newLine = state.pricePerUnit * state.unitCount;
       return prev === cartTotal ? cartTotal + newLine : prev;
     });
+    setCardErrors((prev) => ({ ...prev, [product.id]: "" }));
   };
 
   const completeSale = () => {
@@ -172,31 +235,40 @@ function SellCounterContent() {
     confirm(async () => {
       setLoading(true);
       try {
+        const body: Record<string, unknown> = {
+          paidAmount,
+          items: cart.map((i) => ({
+            productId: i.productId,
+            quantityInSmallestUnit: i.quantityInSmallestUnit,
+            pricePerUnit: i.pricePerUnit,
+            unitCount: i.unitCount,
+          })),
+        };
+
+        if (trackedBuyer?.type === "FARMER") {
+          body.farmerId = trackedBuyer.id;
+        } else if (trackedBuyer?.type === "CUSTOMER") {
+          body.customerId = trackedBuyer.id;
+        } else {
+          if (customerName.trim()) body.customerName = customerName.trim();
+          if (customerPhone.trim()) body.customerPhone = customerPhone.trim();
+        }
+
         const res = await fetch("/api/sales", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            farmerId: farmerId || undefined,
-            customerId: farmerId ? undefined : selectedCustomer?.id,
-            customerName: farmerId ? undefined : customerName || undefined,
-            customerPhone: farmerId ? undefined : customerPhone || undefined,
-            paidAmount,
-            items: cart.map((i) => ({
-              productId: i.productId,
-              quantityInSmallestUnit: i.quantityInSmallestUnit,
-              pricePerUnit: i.pricePerUnit,
-              unitCount: i.unitCount,
-            })),
-          }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
         setCart([]);
-        setSelectedCustomer(null);
+        setTrackedBuyer(null);
         setCustomerName("");
         setCustomerPhone("");
         setPaidAmount(0);
-        if (farmerId) loadFarmer(farmerId);
+        setLastPriceMap(new Map());
+        if (farmerIdParam) loadBuyerFromFarmer(farmerIdParam);
+        else if (customerIdParam) loadBuyerFromCustomer(customerIdParam);
         loadProducts();
       } catch (err) {
         alert(err instanceof Error ? err.message : "Sale failed");
@@ -219,9 +291,11 @@ function SellCounterContent() {
   return (
     <>
       <div className="mb-4 rounded-xl border border-[var(--info-border)] bg-[var(--info-bg)] p-4 text-sm text-[var(--info-text)]">
-        <p className="font-semibold">{farmer ? t.farmers.sellCounterHint : t.sell.redesignHint}</p>
+        <p className="font-semibold">
+          {trackedBuyer ? t.farmers.sellCounterHint : t.sell.wholesaleHint}
+        </p>
         <p className="mt-1 opacity-90">
-          {farmer ? t.farmers.sellPaidThisSaleOnly : t.sell.autoPriceHint}
+          {trackedBuyer ? t.farmers.sellPaidThisSaleOnly : t.sell.autoPriceHint}
         </p>
       </div>
 
@@ -283,7 +357,8 @@ function SellCounterContent() {
                 key={p.id}
                 product={p}
                 cart={cart}
-                state={cardStates[p.id] ?? getDefaultProductState(p)}
+                lastPriceMap={lastPriceMap}
+                state={cardStates[p.id] ?? getDefaultProductState(p, lastPriceMap)}
                 onStateChange={(state) =>
                   setCardStates((prev) => ({ ...prev, [p.id]: state }))
                 }
@@ -305,15 +380,21 @@ function SellCounterContent() {
             }}
             paidAmount={paidAmount}
             onPaidChange={setPaidAmount}
-            selectedCustomer={selectedCustomer}
-            onCustomerSelect={setSelectedCustomer}
+            trackedBuyer={trackedBuyer}
+            onBuyerSelect={(b) => {
+              setTrackedBuyer(b);
+              if (b) {
+                setCustomerName(b.name);
+                setCustomerPhone(b.phone);
+              }
+            }}
             manualName={customerName}
             manualPhone={customerPhone}
             onManualNameChange={setCustomerName}
             onManualPhoneChange={setCustomerPhone}
             onComplete={completeSale}
             loading={loading}
-            farmer={farmer}
+            fullBagInCart={fullBagInCart}
           />
         </div>
       </div>
