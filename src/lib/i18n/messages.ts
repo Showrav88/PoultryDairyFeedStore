@@ -34,6 +34,14 @@ export const messages = {
       wallet: "Wallet",
       analytics: "Analytics",
       history: "History",
+      shopDetails: "Shop Details",
+    },
+    shop: {
+      title: "Shop Details",
+      subtitle: "View and update your shop profile shown in the app.",
+      shopNumberHelp: "Shop number is fixed at registration and cannot be changed.",
+      memberSince: "Member since",
+      saveConfirm: "Save shop details?",
     },
     common: {
       save: "Save",
@@ -411,6 +419,14 @@ export const messages = {
       wallet: "ওয়ালেট",
       analytics: "বিশ্লেষণ",
       history: "ইতিহাস",
+      shopDetails: "দোকানের তথ্য",
+    },
+    shop: {
+      title: "দোকানের তথ্য",
+      subtitle: "অ্যাপে দেখানো দোকানের প্রোফাইল দেখুন ও আপডেট করুন।",
+      shopNumberHelp: "দোকান নম্বর নিবন্ধনের সময় নির্ধারিত — পরিবর্তন করা যায় না।",
+      memberSince: "যোগদানের তারিখ",
+      saveConfirm: "দোকানের তথ্য সংরক্ষণ করবেন?",
     },
     common: {
       save: "সংরক্ষণ",
