@@ -20,8 +20,8 @@ const shopSelect = {
 
 const updateSchema = z.object({
   shopName: z.string().min(2).optional(),
+  shopNumber: z.string().min(1).optional(),
   phone: z.string().min(10).optional(),
-  email: z.string().email().optional(),
 });
 
 export async function GET() {
@@ -54,8 +54,8 @@ export async function PATCH(request: Request) {
 
     if (
       data.shopName == null &&
-      data.phone == null &&
-      data.email == null
+      data.shopNumber == null &&
+      data.phone == null
     ) {
       return NextResponse.json(
         { error: "No fields to update" },
@@ -71,13 +71,13 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (data.email && data.email !== existing.email) {
-      const emailTaken = await prisma.shop.findFirst({
-        where: { email: data.email, id: { not: session.shopId } },
+    if (data.shopNumber && data.shopNumber !== existing.shopNumber) {
+      const numberTaken = await prisma.shop.findFirst({
+        where: { shopNumber: data.shopNumber, id: { not: session.shopId } },
       });
-      if (emailTaken) {
+      if (numberTaken) {
         return NextResponse.json(
-          { error: "Email already registered" },
+          { error: "Shop number already registered" },
           { status: 400 }
         );
       }
@@ -87,8 +87,8 @@ export async function PATCH(request: Request) {
       where: { id: session.shopId },
       data: {
         ...(data.shopName != null ? { shopName: data.shopName } : {}),
+        ...(data.shopNumber != null ? { shopNumber: data.shopNumber } : {}),
         ...(data.phone != null ? { phone: data.phone } : {}),
-        ...(data.email != null ? { email: data.email } : {}),
       },
       select: shopSelect,
     });
@@ -101,20 +101,20 @@ export async function PATCH(request: Request) {
       `Shop "${shop.shopName}" details updated`,
       {
         shopName: existing.shopName,
+        shopNumber: existing.shopNumber,
         phone: existing.phone,
-        email: existing.email,
       },
       {
         shopName: shop.shopName,
+        shopNumber: shop.shopNumber,
         phone: shop.phone,
-        email: shop.email,
       }
     );
 
-    if (shop.shopName !== session.shopName || shop.email !== session.email) {
+    if (shop.shopName !== session.shopName) {
       const token = await createSession({
         shopId: session.shopId,
-        email: shop.email,
+        email: session.email,
         shopName: shop.shopName,
       });
       await setSessionCookie(token);

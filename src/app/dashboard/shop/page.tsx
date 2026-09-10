@@ -50,8 +50,8 @@ export default function ShopDetailsPage() {
   const dirty =
     initial != null &&
     (form.shopName !== initial.shopName ||
-      form.phone !== initial.phone ||
-      form.email !== initial.email);
+      form.shopNumber !== initial.shopNumber ||
+      form.phone !== initial.phone);
 
   const handleSave = () => {
     if (!dirty) return;
@@ -63,8 +63,8 @@ export default function ShopDetailsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             shopName: form.shopName,
+            shopNumber: form.shopNumber,
             phone: form.phone,
-            email: form.email,
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error);
@@ -101,7 +101,10 @@ export default function ShopDetailsPage() {
         </div>
         <div>
           <Label>{t.auth.shopNumber}</Label>
-          <Input value={form.shopNumber} readOnly disabled />
+          <Input
+            value={form.shopNumber}
+            onChange={(e) => setForm({ ...form, shopNumber: e.target.value })}
+          />
           <p className="mt-1 text-xs text-gray-500">{t.shop.shopNumberHelp}</p>
         </div>
         <div>
@@ -113,11 +116,8 @@ export default function ShopDetailsPage() {
         </div>
         <div>
           <Label>{t.auth.email}</Label>
-          <Input
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
+          <Input type="email" value={form.email} readOnly disabled />
+          <p className="mt-1 text-xs text-gray-500">{t.shop.emailHelp}</p>
         </div>
 
         {initial && (
@@ -130,7 +130,13 @@ export default function ShopDetailsPage() {
           <Button
             className="min-h-11"
             onClick={handleSave}
-            disabled={!dirty || loading || !form.shopName || !form.phone || !form.email}
+            disabled={
+              !dirty ||
+              loading ||
+              !form.shopName ||
+              !form.shopNumber ||
+              !form.phone
+            }
           >
             {t.common.save}
           </Button>
