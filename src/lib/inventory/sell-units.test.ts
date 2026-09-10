@@ -22,9 +22,11 @@ describe("getKhucraMaxGrams", () => {
 });
 
 describe("generateFeedAllowedSellUnits", () => {
-  it("includes small presets and 5 kg steps up to khucra max for 50 kg", () => {
+  it("includes 1 kg through 5 kg steps up to khucra max for 50 kg", () => {
     const units = generateFeedAllowedSellUnits(50000);
-    expect(units).toContain(100);
+    expect(units).not.toContain(100);
+    expect(units).not.toContain(250);
+    expect(units).not.toContain(500);
     expect(units).toContain(1000);
     expect(units).toContain(5000);
     expect(units).toContain(30000);
@@ -34,6 +36,7 @@ describe("generateFeedAllowedSellUnits", () => {
 
   it("caps khucra at 20 kg for 25 kg bag", () => {
     const units = generateFeedAllowedSellUnits(25000);
+    expect(units).toContain(1000);
     expect(units).toContain(20000);
     expect(units).not.toContain(25000);
   });
@@ -46,22 +49,19 @@ describe("buildSellUnitOptions", () => {
     allowedSellUnits: generateFeedAllowedSellUnits(50000),
   };
 
-  it("orders full bag first then descending khucra", () => {
+  it("orders full bag first then descending khucra from 1 kg upward", () => {
     const options = buildSellUnitOptions(product50);
     expect(options[0]).toBe(50000);
     expect(options[1]).toBe(30000);
-    expect(options).toContain(25000);
-    expect(options).toContain(100);
+    expect(options).toContain(1000);
+    expect(options).not.toContain(100);
     for (let i = 1; i < options.length - 1; i++) {
       expect(options[i]).toBeGreaterThanOrEqual(options[i + 1]);
     }
   });
 
-  it("defaults to full bag", () => {
-    expect(getDefaultSellUnitSize(product50)).toBe(50000);
-  });
-
-  it("walk-in default prefers 1 kg khucra over full bag", () => {
+  it("defaults to 1 kg on sell counter", () => {
+    expect(getDefaultSellUnitSize(product50)).toBe(1000);
     expect(getWalkInDefaultSellUnitSize(product50)).toBe(1000);
   });
 });
@@ -69,7 +69,9 @@ describe("buildSellUnitOptions", () => {
 describe("normalizeAllowedSellUnits", () => {
   it("regenerates feed units from bag size", () => {
     const units = normalizeAllowedSellUnits("BAG", 25000, [100, 250]);
+    expect(units).toContain(1000);
     expect(units).toContain(20000);
+    expect(units).not.toContain(100);
     expect(units.length).toBeGreaterThan(2);
   });
 

@@ -61,6 +61,7 @@ describe("resolveSellProductInput", () => {
     expect(options[0]).toBe(25000);
     expect(options).toContain(20000);
     expect(options).toContain(1000);
+    expect(options).not.toContain(100);
   });
 });
 

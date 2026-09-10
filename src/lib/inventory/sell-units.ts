@@ -5,8 +5,11 @@ export interface SellPreset {
   value: number;
 }
 
-/** Small gram presets always available on feed khucra. */
+/** Small gram presets kept for legacy product detection only. Counter uses 1 kg+. */
 export const FEED_SMALL_PRESETS = [100, 250, 500, 1000] as const;
+
+/** First khucra step on sell counter (1 kg). */
+export const FEED_COUNTER_MIN_GRAMS = 1000;
 
 export function isFeedWeightUnit(weightUnit: string): boolean {
   return weightUnit === "BAG" || weightUnit === "GRAM" || weightUnit === "KG";
@@ -20,15 +23,15 @@ export function getKhucraMaxGrams(basePackageSizeGrams: number): number {
   return Math.max(1000, basePackageSizeGrams - 5000);
 }
 
-/** Khucra-only units for feed (small grams + 5 kg steps up to khucra max). Excludes full bag. */
+/** Khucra units for feed: 1 kg through khucra max (5 kg steps). Excludes full bag. */
 export function generateFeedAllowedSellUnits(basePackageSizeGrams: number): number[] {
-  if (basePackageSizeGrams <= 0) return [...FEED_SMALL_PRESETS];
+  if (basePackageSizeGrams <= 0) return [FEED_COUNTER_MIN_GRAMS];
   const maxKhucra = getKhucraMaxGrams(basePackageSizeGrams);
-  const kgSteps: number[] = [];
+  const units: number[] = [FEED_COUNTER_MIN_GRAMS];
   for (let g = 5000; g <= maxKhucra; g += 5000) {
-    kgSteps.push(g);
+    units.push(g);
   }
-  return [...FEED_SMALL_PRESETS, ...kgSteps];
+  return units;
 }
 
 export function normalizeAllowedSellUnits(
@@ -98,11 +101,14 @@ export function buildSellUnitOptions(product: SellUnitProductInput): number[] {
 }
 
 export function getDefaultSellUnitSize(product: SellUnitProductInput): number {
+  if (isFeedWeightUnit(product.weightUnit)) {
+    return getWalkInDefaultSellUnitSize(product);
+  }
   const options = buildSellUnitOptions(product);
   return options[0] ?? product.basePackageSize;
 }
 
-/** Walk-in / khucra default: prefer 1 kg chip, else smallest khucra (not full bag). */
+/** Sell counter default for feed: 1 kg chip when available, else smallest khucra (not full bag). */
 export function getWalkInDefaultSellUnitSize(product: SellUnitProductInput): number {
   const options = buildSellUnitOptions(product);
   const khucraOnly = options.filter((u) => u !== product.basePackageSize);
