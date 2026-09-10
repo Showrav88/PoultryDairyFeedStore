@@ -10,6 +10,10 @@ import {
   normalizeBasePackageSizeGrams,
 } from "@/lib/inventory/product-type";
 import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
+import {
+  recordProductPriceHistoryIfChanged,
+  toProductPrices,
+} from "@/lib/pricing/product-price-history";
 
 export async function GET(
   _req: Request,
@@ -118,6 +122,14 @@ export async function PATCH(
     });
 
     await logAudit(session.shopId, "PRODUCT", id, "UPDATE", `Product "${product.name}" updated`, existing, product);
+
+    await recordProductPriceHistoryIfChanged(
+      prisma,
+      session.shopId,
+      product.id,
+      toProductPrices(existing),
+      toProductPrices(product)
+    );
 
     return NextResponse.json({ product });
   } catch (err) {
