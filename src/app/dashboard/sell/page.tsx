@@ -147,7 +147,8 @@ function SellCounterContent() {
     return () => window.removeEventListener("focus", onFocus);
   }, [loadProducts]);
 
-  const preferWalkInDefault = !trackedBuyer;
+  // Always default to full bag (first sell unit chip), including walk-in sales.
+  const preferWalkInDefault = false;
 
   useEffect(() => {
     if (products.length === 0) return;
