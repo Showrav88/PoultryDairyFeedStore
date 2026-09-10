@@ -11,7 +11,7 @@ import {
   formatSellUnitLabel,
   getCustomUnitOptions,
   getDefaultSellUnitSize,
-  isFullPackageUnit,
+  getWalkInDefaultSellUnitSize,
   parseCustomSellAmount,
   type CustomSellUnit,
 } from "@/lib/inventory/sell-units";
@@ -91,9 +91,12 @@ function unitPriceFor(
 
 export function getDefaultProductState(
   product: SellProduct,
-  lastPriceMap?: Map<string, number>
+  lastPriceMap?: Map<string, number>,
+  preferWalkInDefault = false
 ): ProductCardState {
-  const unitSize = getDefaultSellUnitSize(product);
+  const unitSize = preferWalkInDefault
+    ? getWalkInDefaultSellUnitSize(product)
+    : getDefaultSellUnitSize(product);
   const customOptions = getCustomUnitOptions(product.weightUnit);
   const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap);
   return {
@@ -104,6 +107,16 @@ export function getDefaultProductState(
     customAmount: 1,
     customUnit: customOptions[0]?.value ?? "KG",
   };
+}
+
+export function applyLastPricesToState(
+  product: SellProduct,
+  state: ProductCardState,
+  lastPriceMap?: Map<string, number>
+): ProductCardState {
+  const unitSize = resolveSellUnitSize(state);
+  const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap);
+  return { ...state, pricePerUnit };
 }
 
 export function getSellUnitOptions(product: SellProduct): number[] {
@@ -214,9 +227,9 @@ export function ProductSellCard({
   };
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:p-4">
-      <div className="mb-3 flex gap-3">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-2 sm:p-4">
+      <div className="mb-2 flex gap-2 sm:mb-3 sm:gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 sm:h-16 sm:w-16">
           {product.imageUrl ? (
             <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
           ) : (
@@ -226,41 +239,40 @@ export function ProductSellCard({
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-semibold">{product.name}</h3>
           <p className="truncate text-xs text-gray-500">{product.productId}</p>
-          <p className="mt-1 text-xs font-medium text-emerald-600">
+          <p className="mt-0.5 text-[11px] font-medium text-emerald-600 sm:mt-1 sm:text-xs">
             {t.sell.availableStock}: {formatStockAmount(available, product.weightUnit)}
           </p>
           {product.inventory.formattedOpenBag && (
-            <p className="text-xs text-gray-500">
+            <p className="hidden text-xs text-gray-500 sm:block">
               {t.sell.openBagTitle}: {product.inventory.formattedOpenBag}
             </p>
           )}
           {product.inventory.closedBags > 0 && (
-            <p className="text-xs text-gray-500">
+            <p className="hidden text-xs text-gray-500 sm:block">
               {t.sell.sealedBags}: {product.inventory.closedBags}
             </p>
           )}
           {product.sellPrice > 0 && (
-            <p className="text-xs text-gray-500">
-              {t.sell.suggestedOnly}: {formatCurrency(pricing.suggestedPricePerUnit)} /{" "}
-              {formatSellUnitLabel(effectiveUnitSize, product.weightUnit, product.basePackageSize)}
+            <p className="text-[11px] text-gray-500 sm:text-xs">
+              {t.sell.suggestedOnly}: {formatCurrency(pricing.suggestedPricePerUnit)}
             </p>
           )}
           {lastForUnit != null && lastForUnit > 0 && (
-            <p className="text-xs text-emerald-700">
+            <p className="text-[11px] text-emerald-700 sm:text-xs">
               {t.sell.lastPriceForBuyer}: {formatCurrency(lastForUnit)}
             </p>
           )}
         </div>
       </div>
 
-      <Label className="mb-1 block text-xs">{t.sell.selectUnit}</Label>
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      <Label className="mb-1 block text-[11px] sm:text-xs">{t.sell.selectUnit}</Label>
+      <div className="mb-2 flex flex-wrap gap-1 sm:mb-3 sm:gap-1.5">
         {unitOptions.map((u) => (
           <button
             key={u}
             type="button"
             onClick={() => selectUnit(u)}
-            className={`min-h-9 rounded-lg border px-2.5 py-1 text-xs font-medium ${
+            className={`min-h-8 rounded-lg border px-2 py-0.5 text-[11px] font-medium sm:min-h-9 sm:px-2.5 sm:py-1 sm:text-xs ${
               state.mode === "preset" && state.unitSize === u
                 ? "border-emerald-600 bg-emerald-600 text-white"
                 : "border-gray-300 dark:border-gray-600"
@@ -272,7 +284,7 @@ export function ProductSellCard({
         <button
           type="button"
           onClick={selectCustomMode}
-          className={`min-h-9 rounded-lg border px-2.5 py-1 text-xs font-medium ${
+          className={`min-h-8 rounded-lg border px-2 py-0.5 text-[11px] font-medium sm:min-h-9 sm:px-2.5 sm:py-1 sm:text-xs ${
             state.mode === "custom"
               ? "border-emerald-600 bg-emerald-600 text-white"
               : "border-gray-300 dark:border-gray-600"
@@ -283,7 +295,7 @@ export function ProductSellCard({
       </div>
 
       {state.mode === "custom" && (
-        <div className="mb-3 flex gap-2">
+        <div className="mb-2 flex gap-2 sm:mb-3">
           <NumberInput
             className="flex-1"
             placeholder={t.common.enterQty}
@@ -304,7 +316,7 @@ export function ProductSellCard({
         </div>
       )}
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
+      <div className="mb-2 grid grid-cols-2 gap-2 sm:mb-3">
         <div>
           <Label className="text-xs">{t.sell.quantity}</Label>
           <div className="mt-1 flex items-center gap-2">
@@ -370,13 +382,14 @@ export function ProductSellCard({
         </p>
       )}
 
-      <div className="mb-2 flex items-center justify-between text-sm">
+      <div className="mb-1.5 flex items-center justify-between text-sm sm:mb-2">
         <span>{t.sell.lineTotal}</span>
         <strong>{formatCurrency(lineTotal)}</strong>
       </div>
 
       <Button
-        className="min-h-10 w-full"
+        type="button"
+        className="min-h-10 w-full touch-manipulation active:scale-[0.99]"
         onClick={handleAdd}
         disabled={available <= 0 || lineStock > available || effectiveUnitSize <= 0}
       >

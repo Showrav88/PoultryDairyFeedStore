@@ -102,6 +102,16 @@ export function getDefaultSellUnitSize(product: SellUnitProductInput): number {
   return options[0] ?? product.basePackageSize;
 }
 
+/** Walk-in / khucra default: prefer 1 kg chip, else smallest khucra (not full bag). */
+export function getWalkInDefaultSellUnitSize(product: SellUnitProductInput): number {
+  const options = buildSellUnitOptions(product);
+  const khucraOnly = options.filter((u) => u !== product.basePackageSize);
+  if (khucraOnly.length === 0) return options[0] ?? product.basePackageSize;
+  const oneKg = khucraOnly.find((u) => u === 1000);
+  if (oneKg) return oneKg;
+  return khucraOnly[khucraOnly.length - 1];
+}
+
 export const PRODUCT_TYPE_TEMPLATES: Record<
   string,
   {

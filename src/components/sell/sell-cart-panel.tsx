@@ -9,7 +9,7 @@ import {
   type TrackedBuyer,
 } from "@/components/sell/wholesale-buyer-search";
 import { useI18n } from "@/lib/i18n/context";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { CartLine } from "@/lib/inventory/cart-stock";
 
 export interface CartItem extends CartLine {
@@ -19,6 +19,8 @@ export interface CartItem extends CartLine {
 }
 
 interface SellCartPanelProps {
+  id?: string;
+  className?: string;
   cart: CartItem[];
   onRemove: (index: number) => void;
   paidAmount: number;
@@ -35,6 +37,8 @@ interface SellCartPanelProps {
 }
 
 export function SellCartPanel({
+  id,
+  className,
   cart,
   onRemove,
   paidAmount,
@@ -71,7 +75,13 @@ export function SellCartPanel({
   };
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 lg:sticky lg:top-4">
+    <div
+      id={id}
+      className={cn(
+        "rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:p-4",
+        className
+      )}
+    >
       <h3 className="mb-3 flex items-center gap-2 font-bold">
         <ShoppingCart size={18} /> {t.sell.cart}
       </h3>
