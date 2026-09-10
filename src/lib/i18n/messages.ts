@@ -97,6 +97,11 @@ export const messages = {
       feedKhucraAutoHelp: "Khucra sizes auto-set from bag size (100g–1kg + 5 kg steps). 25 kg bag → up to 20 kg khucra; 50 kg → up to 30 kg. Full bag first on counter.",
       feedExample: "Example: 50 kg bag — buy 10 bags in Purchases, sell 5 kg khucra or 1 full bag",
       selectTypeFirst: "Choose product type below — technical weight settings are filled automatically",
+      priceHistory: "Price history (3 rates)",
+      priceHistoryHelp: "Like gold rates — each row shows sell, cost, and TP when any price changed.",
+      sellShort: "Sell",
+      costShort: "Cost",
+      tpShort: "TP",
     },
     suppliers: {
       title: "Suppliers",
@@ -247,6 +252,8 @@ export const messages = {
       legacyTpConfirm: "Apply TP prices? Supplier due will be recalculated on TP total (paid amount stays the same).",
       legacyTpAllLines: "Enter TP price for every line",
       updatePayment: "Update Payment",
+      autoFromProduct: "Auto from product settings",
+      autoFromProductHelp: "Cost and TP pre-fill from Products tab — change defaults there, then open a new purchase.",
     },
     sell: {
       title: "Sell Counter",
@@ -467,6 +474,11 @@ export const messages = {
       feedKhucraAutoHelp: "ব্যাগ সাইজ অনুযায়ী খুচরা সাইজ স্বয়ংক্রিয় (১০০g–১kg + ৫ kg ধাপ)। ২৫ kg ব্যাগ → ২০ kg পর্যন্ত; ৫০ kg → ৩০ kg। কাউন্টারে প্রথমে পূর্ণ ব্যাগ।",
       feedExample: "উদাহরণ: ৫০ কেজি ব্যাগ — ক্রয়ে ১০ ব্যাগ নিন, বিক্রিতে ৫ কেজি খুচরা বা ১ পূর্ণ ব্যাগ",
       selectTypeFirst: "নিচে পণ্যের ধরন বেছে নিন — ওজন সেটিংস স্বয়ংক্রিয় হবে",
+      priceHistory: "মূল্য ইতিহাস (৩টি হার)",
+      priceHistoryHelp: "সোনার দরের মতো — sell, cost, TP যেকোনো পরিবর্তনে নতুন সারি।",
+      sellShort: "বিক্রয়",
+      costShort: "ক্রয়",
+      tpShort: "TP",
     },
     suppliers: {
       title: "সরবরাহকারী",
@@ -617,6 +629,8 @@ export const messages = {
       legacyTpConfirm: "TP মূল্য প্রয়োগ করবেন? সাপ্লায়ার due TP মোট অনুযায়ী পুনঃগণনা হবে (পরিশোধিত টাকা একই থাকবে)।",
       legacyTpAllLines: "প্রতিটি লাইনে TP মূল্য লিখুন",
       updatePayment: "পেমেন্ট আপডেট",
+      autoFromProduct: "পণ্য সেটিংস থেকে স্বয়ংক্রিয়",
+      autoFromProductHelp: "ক্রয় ও TP পণ্য ট্যাবের ডিফল্ট থেকে আসে — সেখানে বদলে নতুন ক্রয় খুলুন।",
     },
     sell: {
       title: "বিক্রয় কাউন্টার",

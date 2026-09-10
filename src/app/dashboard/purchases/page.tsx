@@ -81,6 +81,11 @@ export default function PurchasesPage() {
   const loadPurchases = () =>
     fetch("/api/purchases").then((r) => r.json()).then((d) => setPurchases(d.purchases ?? []));
 
+  const loadProducts = () =>
+    fetch("/api/products", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setProducts(d.products ?? []));
+
   const searchBuyers = useCallback((q: string) => {
     const params = q ? `?q=${encodeURIComponent(q)}` : "";
     fetch(`/api/buyers${params}`)
@@ -91,8 +96,12 @@ export default function PurchasesPage() {
   useEffect(() => {
     loadPurchases();
     searchBuyers("");
-    fetch("/api/products").then((r) => r.json()).then((d) => setProducts(d.products ?? []));
+    loadProducts();
   }, [searchBuyers]);
+
+  useEffect(() => {
+    if (showForm) loadProducts();
+  }, [showForm]);
 
   useEffect(() => {
     if (buyerId) return;
@@ -314,13 +323,14 @@ export default function PurchasesPage() {
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold sm:text-2xl">{t.purchases.title}</h1>
-        <Button className="min-h-11 shrink-0" onClick={() => setShowForm(!showForm)}>
+        <Button className="min-h-11 shrink-0" onClick={() => setShowForm((v) => !v)}>
           <Plus size={18} /> {t.purchases.newPurchase}
         </Button>
       </div>
 
       {showForm && (
         <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
+          <p className="mb-4 text-xs text-emerald-700">{t.purchases.autoFromProductHelp}</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="relative">
               <Label>{t.purchases.selectSupplier}</Label>
@@ -385,7 +395,9 @@ export default function PurchasesPage() {
           </div>
 
           <div className="mb-4 mt-4 space-y-2">
-            {items.map((item, idx) => (
+            {items.map((item, idx) => {
+              const defaults = productDefaults(item.productId);
+              return (
               <div key={idx} className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-3 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="sm:col-span-2">
                   <Label>{t.purchases.selectProduct}</Label>
@@ -416,6 +428,11 @@ export default function PurchasesPage() {
                     value={item.costPricePerUnit}
                     onChange={(v) => updateItem(idx, "costPricePerUnit", v)}
                   />
+                  {defaults.cost > 0 && (
+                    <p className="mt-0.5 text-[10px] text-gray-500">
+                      {t.purchases.autoFromProduct}: {formatCurrency(defaults.cost)}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>{t.purchases.tpPerUnit}</Label>
@@ -424,6 +441,11 @@ export default function PurchasesPage() {
                     value={item.tpPricePerUnit}
                     onChange={(v) => updateItem(idx, "tpPricePerUnit", v)}
                   />
+                  {defaults.tp > 0 && (
+                    <p className="mt-0.5 text-[10px] text-gray-500">
+                      {t.purchases.autoFromProduct}: {formatCurrency(defaults.tp)}
+                    </p>
+                  )}
                   {item.tpPricePerUnit > 0 && item.tpPricePerUnit < item.costPricePerUnit && (
                     <p className="mt-1 text-xs text-red-600">{t.purchases.tpMustBeAtLeastCost}</p>
                   )}
@@ -446,7 +468,8 @@ export default function PurchasesPage() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

@@ -13,6 +13,10 @@ import {
   productNeedsSellConfigSync,
 } from "@/lib/inventory/product-type";
 import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
+import {
+  recordProductPriceHistoryIfChanged,
+  toProductPrices,
+} from "@/lib/pricing/product-price-history";
 
 function enrichProduct(p: {
   stockInSmallestUnit: number;
@@ -133,6 +137,14 @@ export async function POST(request: Request) {
     });
 
     await logAudit(session.shopId, "PRODUCT", product.id, "CREATE", `Product "${data.name}" created (${productId})`, null, product);
+
+    await recordProductPriceHistoryIfChanged(
+      prisma,
+      session.shopId,
+      product.id,
+      null,
+      toProductPrices(product)
+    );
 
     return NextResponse.json({ product });
   } catch (err) {

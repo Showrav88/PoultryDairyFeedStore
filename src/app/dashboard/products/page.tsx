@@ -5,6 +5,7 @@ import { Plus, Package, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ProductPriceHistoryPanel } from "@/components/products/product-price-history";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -388,6 +389,12 @@ export default function ProductsPage() {
                   <Button size="sm" variant="outline" onClick={() => openEdit(p)}><Pencil size={14} /> {t.common.edit}</Button>
                   <Button size="sm" variant="outline" onClick={() => handleDelete(p)}><Trash2 size={14} className="text-red-500" /> {t.common.delete}</Button>
                 </div>
+                <ProductPriceHistoryPanel
+                  productId={p.id}
+                  currentSell={p.sellPrice}
+                  currentCost={p.defaultCostPrice ?? null}
+                  currentTp={p.defaultTpPrice ?? null}
+                />
               </div>
             </div>
           );

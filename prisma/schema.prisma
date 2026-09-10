@@ -31,6 +31,7 @@ model Shop {
   walletTransactions WalletTransaction[]
   auditLogs          AuditLog[]
   buyerProductLastPrices BuyerProductLastPrice[]
+  productPriceHistories ProductPriceHistory[]
 }
 
 // ─── Product Catalogue ───────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ model Product {
   farmIssueItems FarmIssueItem[]
   farmReturnItems FarmReturnItem[]
   buyerLastPrices BuyerProductLastPrice[]
+  priceHistory    ProductPriceHistory[]
 
   @@unique([shopId, productId])
   @@index([shopId])
@@ -591,6 +593,23 @@ model BuyerProductLastPrice {
 
   @@unique([shopId, buyerType, buyerId, productId, unitSizeInSmallestUnit])
   @@index([shopId, buyerType, buyerId])
+}
+
+/** Snapshot when sell / default cost / default TP prices change (gold-rate style history). */
+model ProductPriceHistory {
+  id               String   @id @default(cuid())
+  shopId           String
+  productId        String
+  sellPrice        Decimal  @db.Decimal(12, 2)
+  defaultCostPrice Decimal? @db.Decimal(12, 2)
+  defaultTpPrice   Decimal? @db.Decimal(12, 2)
+  createdAt        DateTime @default(now())
+
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([productId, createdAt])
 }
 
 model AuditLog {
