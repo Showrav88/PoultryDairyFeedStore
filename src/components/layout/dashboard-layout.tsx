@@ -14,11 +14,12 @@ import {
   Wallet,
   BarChart3,
   History,
+  Settings,
   LogOut,
   Menu,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LocaleToggle, ThemeToggle } from "@/components/layout/theme-toggle";
 import { useI18n } from "@/lib/i18n/context";
@@ -36,6 +37,7 @@ const navItems = [
   { href: "/dashboard/wallet", icon: Wallet, key: "wallet" as const },
   { href: "/dashboard/analytics", icon: BarChart3, key: "analytics" as const },
   { href: "/dashboard/history", icon: History, key: "history" as const },
+  { href: "/dashboard/shop", icon: Settings, key: "shopDetails" as const },
 ];
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -43,6 +45,24 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shopName, setShopName] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.shop?.shopName) setShopName(d.shop.shopName);
+      });
+
+    const onShopUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ shopName?: string }>).detail;
+      if (detail?.shopName) setShopName(detail.shopName);
+    };
+    window.addEventListener("shop-updated", onShopUpdated);
+    return () => window.removeEventListener("shop-updated", onShopUpdated);
+  }, []);
+
+  const brandTitle = shopName ?? t.app.name;
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -53,7 +73,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-[100dvh] bg-[var(--background)]">
       <aside className="hidden w-64 flex-shrink-0 border-r border-[var(--border)] bg-[var(--card)] md:flex md:flex-col">
         <div className="p-4 border-b border-[var(--border)]">
-          <h1 className="text-lg font-bold text-emerald-600">🐔 {t.app.name}</h1>
+          <h1 className="text-lg font-bold text-emerald-600">🐔 {brandTitle}</h1>
           <p className="text-xs text-[var(--muted)]">{t.app.tagline}</p>
         </div>
         <nav className="flex-1 p-3 space-y-1">
@@ -115,7 +135,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <aside className="relative flex h-full w-[82%] max-w-xs flex-col bg-[var(--card)] pt-[env(safe-area-inset-top)] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
               <div>
-                <h1 className="font-bold text-emerald-600">🐔 {t.app.name}</h1>
+                <h1 className="font-bold text-emerald-600">🐔 {brandTitle}</h1>
                 <p className="text-xs text-[var(--muted)]">{t.app.tagline}</p>
               </div>
               <button
