@@ -21,7 +21,8 @@ import {
 } from "@/components/sell/wholesale-buyer-search";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { formatSellUnitLabel, isFullPackageUnit } from "@/lib/inventory/sell-units";
+import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
+import { resolveSellProductInput } from "@/lib/inventory/product-type";
 import { getCartReservedStock } from "@/lib/inventory/cart-stock";
 import { buildLastPriceMap } from "@/lib/sell/last-price";
 
@@ -191,7 +192,8 @@ function SellCounterContent() {
     return cart.some((item) => {
       const product = products.find((p) => p.id === item.productId);
       if (!product) return false;
-      return isFullPackageUnit(item.quantityInSmallestUnit, product.basePackageSize);
+      const resolved = resolveSellProductInput(product);
+      return item.quantityInSmallestUnit === resolved.basePackageSize && resolved.basePackageSize > 1;
     });
   }, [cart, products]);
 
@@ -209,23 +211,12 @@ function SellCounterContent() {
       cardStates[product.id] ??
       getDefaultProductState(product, lastPriceMap, preferWalkInDefault);
     const unitSize = resolveSellUnitSize(state);
-
-    if (
-      isFullPackageUnit(unitSize, product.basePackageSize) &&
-      !hasTrackedIdentity(trackedBuyer, customerName, customerPhone)
-    ) {
-      setCardErrors((prev) => ({
-        ...prev,
-        [product.id]: t.sell.fullBagRequiresBuyer,
-      }));
-      scrollToCart();
-      return;
-    }
+    const resolved = resolveSellProductInput(product);
 
     const sellUnitLabel = formatSellUnitLabel(
       unitSize,
-      product.weightUnit,
-      product.basePackageSize
+      resolved.weightUnit,
+      resolved.basePackageSize
     );
 
     setCart((prev) => {

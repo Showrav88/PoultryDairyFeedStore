@@ -34,14 +34,14 @@ describe("validateSaleCheckout", () => {
     expect(err).toMatch(/Due sales require/);
   });
 
-  it("blocks full bag without tracked buyer", () => {
+  it("allows full bag walk-in when paid in full", () => {
     const err = validateSaleCheckout({
       lines: [{ productId: "p1", quantityInSmallestUnit: 50000, pricePerUnit: 2800 }],
       products: [product],
       paidAmount: 2800,
       totalAmount: 2800,
     });
-    expect(err).toMatch(/Full bag/);
+    expect(err).toBeNull();
   });
 
   it("allows khucra walk-in full pay", () => {

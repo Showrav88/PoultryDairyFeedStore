@@ -6,7 +6,12 @@ import { generateProductId } from "@/lib/utils";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
 import { formatAvgCostPerKg } from "@/lib/inventory/avg-cost";
-import { formatStockDisplay, normalizeAllowedSellUnits, feedSellUnitsNeedSync, generateFeedAllowedSellUnits } from "@/lib/inventory/sell-units";
+import { formatStockDisplay, normalizeAllowedSellUnits } from "@/lib/inventory/sell-units";
+import {
+  buildSellConfigSyncData,
+  normalizeBasePackageSizeGrams,
+  productNeedsSellConfigSync,
+} from "@/lib/inventory/product-type";
 import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
 
 function enrichProduct(p: {
@@ -61,11 +66,10 @@ export async function GET() {
 
   const enriched = await Promise.all(
     products.map(async (p) => {
-      if (feedSellUnitsNeedSync(p.weightUnit, p.basePackageSize, p.allowedSellUnits)) {
-        const allowedSellUnits = generateFeedAllowedSellUnits(p.basePackageSize);
+      if (productNeedsSellConfigSync(p)) {
         const updated = await prisma.product.update({
           where: { id: p.id },
-          data: { allowedSellUnits },
+          data: buildSellConfigSyncData(p),
         });
         return enrichProduct(updated);
       }

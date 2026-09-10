@@ -97,7 +97,7 @@ export default function ProductsPage() {
     setProductType(type);
     setName(p.name);
     setImageUrl(p.imageUrl ?? "");
-    const displaySize = packageDisplaySize(p.weightUnit, p.basePackageSize, type);
+    const displaySize = packageDisplaySize(p.weightUnit, p.basePackageSize, type, p.allowedSellUnits);
     setPackageSize(
       displaySize > 0 ? displaySize : defaultPackageSizeForType(type)
     );

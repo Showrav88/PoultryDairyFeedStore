@@ -62,9 +62,7 @@ export function SellCartPanel({
   const previousDue = trackedBuyer?.totalDue ?? 0;
   const totalOwedAfter = previousDue + dueAmount;
 
-  const identityOk = !dueRequired && !fullBagInCart
-    ? true
-    : tracked;
+  const identityOk = !dueRequired ? true : tracked;
 
   const handlePaidChange = (value: number) => {
     if (cartTotal > 0 && value > cartTotal) {
