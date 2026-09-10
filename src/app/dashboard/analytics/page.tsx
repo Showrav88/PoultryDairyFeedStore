@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/lib/i18n/context";
 import { formatSellUnitLabel } from "@/lib/inventory/sell-units";
+import { AnimatedCount, AnimatedCurrency } from "@/components/ui/animated-number";
+import { Skeleton, StatCardSkeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 interface ProductRow {
@@ -108,7 +110,8 @@ export default function AnalyticsPage() {
   const [fromDate, setFromDate] = useState(firstOfMonthKey());
   const [toDate, setToDate] = useState(todayKey());
   const [data, setData] = useState<AnalyticsData>(emptyData);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const loadAnalytics = useCallback(async () => {
     setLoading(true);
@@ -128,6 +131,7 @@ export default function AnalyticsPage() {
       setData({ ...emptyData, ...json });
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [view, fromDate, toDate, compareYoy]);
 
@@ -200,31 +204,42 @@ export default function AnalyticsPage() {
         </div>
       )}
 
+      {initialLoad ? (
+        <StatCardSkeleton count={6} className="mb-8 lg:grid-cols-3" />
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {[
-          { label: t.analytics.revenue, value: formatCurrency(data.totalRevenue) },
-          { label: t.analytics.costOfGoods, value: formatCurrency(data.totalCost) },
-          {
-            label: t.analytics.grossProfit,
-            value: formatCurrency(data.totalProfit),
-            highlight: true,
-          },
-          { label: t.common.paid, value: formatCurrency(data.totalPaid) },
-          { label: t.common.due, value: formatCurrency(data.totalDue) },
-          { label: t.analytics.saleCount, value: data.saleCount.toString() },
-        ].map((card) => (
-          <div key={card.label} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-            <p className="text-sm text-gray-500">{card.label}</p>
-            <p
-              className={`text-2xl font-bold mt-1 ${
-                card.highlight ? (data.totalProfit >= 0 ? "text-emerald-600" : "text-red-600") : ""
-              }`}
-            >
-              {card.value}
-            </p>
-          </div>
-        ))}
+          {[
+            { label: t.analytics.revenue, value: data.totalRevenue, currency: true },
+            { label: t.analytics.costOfGoods, value: data.totalCost, currency: true },
+            {
+              label: t.analytics.grossProfit,
+              value: data.totalProfit,
+              currency: true,
+              highlight: true,
+            },
+            { label: t.common.paid, value: data.totalPaid, currency: true },
+            { label: t.common.due, value: data.totalDue, currency: true },
+            { label: t.analytics.saleCount, value: data.saleCount, currency: false },
+          ].map((card) => (
+            <div key={card.label} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+              <p className="text-sm text-gray-500">{card.label}</p>
+              <div
+                className={`mt-1 ${
+                  card.highlight ? (data.totalProfit >= 0 ? "text-emerald-600" : "text-red-600") : ""
+                }`}
+              >
+                {loading ? (
+                  <Skeleton className="mt-1 h-8 w-32" />
+                ) : card.currency ? (
+                  <AnimatedCurrency value={card.value as number} className="text-2xl font-bold" />
+                ) : (
+                  <AnimatedCount value={card.value as number} className="text-2xl font-bold" />
+                )}
+              </div>
+            </div>
+          ))}
       </div>
+      )}
 
       {data.yearComparison && (
         <div className="mb-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">

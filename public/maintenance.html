@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="30" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Updating — Poultry Feed Store</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -30,6 +32,7 @@
     h1 { font-size: 1.35rem; margin-bottom: 12px; }
     p { font-size: 0.95rem; line-height: 1.55; color: #166534; margin-bottom: 8px; }
     .muted { font-size: 0.85rem; color: #4ade80; margin-top: 16px; }
+    .status { font-size: 0.8rem; color: #059669; margin-top: 12px; min-height: 1.2em; }
     .spinner {
       width: 40px; height: 40px; margin: 20px auto;
       border: 3px solid #bbf7d0; border-top-color: #059669;
@@ -42,9 +45,75 @@
   <div class="card">
     <div class="spinner" aria-hidden="true"></div>
     <h1>App is updating</h1>
-    <p>We are deploying a new version. This usually takes <strong>10–20 minutes</strong>.</p>
-    <p>Please wait and refresh — this page reloads automatically every 30 seconds.</p>
+    <p>We are deploying a new version. This usually takes <strong>a few minutes</strong>.</p>
+    <p>This page checks automatically — you will be redirected when the app is ready.</p>
+    <p class="status" id="status" role="status">Checking server…</p>
     <p class="muted">Your data is safe. Stock and accounts are unchanged during updates.</p>
   </div>
+  <script>
+    (function () {
+      var statusEl = document.getElementById("status");
+      var pollMs = 3000;
+      var checks = 0;
+
+      function setStatus(msg) {
+        if (statusEl) statusEl.textContent = msg;
+      }
+
+      function appReady(data) {
+        if (!data || data.status !== "ok") return false;
+        if (data.deployRunning === true) return false;
+        var state = data.deployState || "";
+        if (state === "building" || state === "restarting" || state === "pulling" || state === "started") {
+          return false;
+        }
+        return true;
+      }
+
+      function goHome() {
+        setStatus("Ready — opening app…");
+        window.location.replace("/?_=" + Date.now());
+      }
+
+      async function checkHealth() {
+        checks += 1;
+        try {
+          var res = await fetch("/api/health?_=" + Date.now(), {
+            method: "GET",
+            cache: "no-store",
+            headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+          });
+
+          if (res.ok) {
+            var ct = res.headers.get("content-type") || "";
+            if (ct.indexOf("application/json") !== -1) {
+              var data = await res.json();
+              if (appReady(data)) {
+                goHome();
+                return;
+              }
+              if (data.deployRunning || data.deployState === "building" || data.deployState === "restarting") {
+                setStatus("Build in progress…");
+              } else {
+                setStatus("Server responding — finishing up…");
+              }
+            } else {
+              setStatus("Waiting for app…");
+            }
+          } else if (res.status === 502 || res.status === 503) {
+            setStatus("App is restarting…");
+          } else {
+            setStatus("Checking again…");
+          }
+        } catch (e) {
+          setStatus(checks <= 2 ? "App is restarting…" : "Still updating — retrying…");
+        }
+
+        setTimeout(checkHealth, pollMs);
+      }
+
+      checkHealth();
+    })();
+  </script>
 </body>
 </html>
