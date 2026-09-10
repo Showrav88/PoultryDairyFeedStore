@@ -13,9 +13,14 @@ import {
   formatSellUnitLabel,
   generateFeedAllowedSellUnits,
   getSellPresets,
-  gramsToDisplayKg,
-  kgToGrams,
 } from "@/lib/inventory/sell-units";
+import {
+  defaultPackageSizeForType,
+  detectProductType,
+  packageDisplaySize,
+  packageToBaseSize,
+  type ProductTypeKey,
+} from "@/lib/inventory/product-type";
 
 interface Product {
   id: string;
@@ -35,31 +40,6 @@ interface Product {
   };
 }
 
-type ProductTypeKey = keyof typeof PRODUCT_TYPE_TEMPLATES;
-
-function detectProductType(weightUnit: string): ProductTypeKey {
-  if (weightUnit === "BAG" || weightUnit === "KG" || weightUnit === "GRAM") return "feed_bag";
-  if (weightUnit === "ML" || weightUnit === "LITER") return "liquid";
-  if (weightUnit === "PIECE") return "eggs";
-  if (weightUnit === "GENERIC") return "generic";
-  return "feed_bag";
-}
-
-function packageDisplaySize(weightUnit: string, basePackageSize: number): number {
-  if (weightUnit === "BAG" || weightUnit === "GRAM" || weightUnit === "KG") {
-    return gramsToDisplayKg(basePackageSize);
-  }
-  if (weightUnit === "ML" || weightUnit === "LITER") return basePackageSize;
-  return basePackageSize;
-}
-
-function packageToBaseSize(weightUnit: string, displaySize: number): number {
-  if (weightUnit === "BAG" || weightUnit === "GRAM" || weightUnit === "KG") {
-    return kgToGrams(displaySize);
-  }
-  return Math.round(displaySize);
-}
-
 export default function ProductsPage() {
   const { t } = useI18n();
   const { state: confirmState, confirm, close } = useConfirmDialog();
@@ -70,7 +50,7 @@ export default function ProductsPage() {
   const [productType, setProductType] = useState<ProductTypeKey>("feed_bag");
   const [name, setName] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [packageSize, setPackageSize] = useState(0);
+  const [packageSize, setPackageSize] = useState(defaultPackageSizeForType("feed_bag"));
   const [sellPrice, setSellPrice] = useState(0);
   const [defaultCostPrice, setDefaultCostPrice] = useState(0);
   const [defaultTpPrice, setDefaultTpPrice] = useState(0);
@@ -100,7 +80,9 @@ export default function ProductsPage() {
     const template = PRODUCT_TYPE_TEMPLATES[key];
     setProductType(key);
     setAllowedSellUnits(template.allowedSellUnits);
-    setPackageSize(0);
+    setPackageSize((current) =>
+      current > 0 ? current : defaultPackageSizeForType(key)
+    );
   };
 
   const toggleSellUnit = (value: number) => {
@@ -110,23 +92,34 @@ export default function ProductsPage() {
   };
 
   const openEdit = (p: Product) => {
-    const type = detectProductType(p.weightUnit);
+    const type = detectProductType(p.weightUnit, p.basePackageSize, p.allowedSellUnits);
     setEditingId(p.id);
     setProductType(type);
     setName(p.name);
     setImageUrl(p.imageUrl ?? "");
-    setPackageSize(packageDisplaySize(p.weightUnit, p.basePackageSize));
+    const displaySize = packageDisplaySize(p.weightUnit, p.basePackageSize, type);
+    setPackageSize(
+      displaySize > 0 ? displaySize : defaultPackageSizeForType(type)
+    );
     setSellPrice(p.sellPrice);
     setDefaultCostPrice(p.defaultCostPrice ?? 0);
     setDefaultTpPrice(p.defaultTpPrice ?? 0);
     setAllowedSellUnits(p.allowedSellUnits);
     setShowForm(true);
+    requestAnimationFrame(() => {
+      document.getElementById("product-form")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
   };
 
   const resetForm = () => {
     setShowForm(false);
     setEditingId(null);
-    applyTemplate("feed_bag");
+    setProductType("feed_bag");
+    setAllowedSellUnits(PRODUCT_TYPE_TEMPLATES.feed_bag.allowedSellUnits);
+    setPackageSize(defaultPackageSizeForType("feed_bag"));
     setName("");
     setImageUrl("");
     setSellPrice(0);
@@ -217,9 +210,16 @@ export default function ProductsPage() {
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6">
+        <div
+          id="product-form"
+          className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6"
+        >
           <h2 className="mb-1 font-semibold">{editingId ? "Edit Product" : "New Product"}</h2>
-          <p className="mb-4 text-sm text-[var(--muted)]">{t.products.selectTypeFirst}</p>
+          <p className="mb-4 text-sm text-[var(--muted)]">
+            {editingId
+              ? "Choose product type and set bag/bottle weight below — same options as when adding a new product."
+              : t.products.selectTypeFirst}
+          </p>
 
           <Label className="mb-2 block">{t.products.productType}</Label>
           <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -343,12 +343,12 @@ export default function ProductsPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {products.map((p) => {
-          const type = detectProductType(p.weightUnit);
+          const type = detectProductType(p.weightUnit, p.basePackageSize, p.allowedSellUnits);
           const typeLabel = PRODUCT_TYPE_TEMPLATES[type]?.label ?? p.weightUnit;
           const sizeLabel =
-            p.weightUnit === "BAG" || p.weightUnit === "GRAM" || p.weightUnit === "KG"
-              ? `${gramsToDisplayKg(p.basePackageSize)} kg bag`
-              : p.weightUnit === "ML" || p.weightUnit === "LITER"
+            type === "feed_bag"
+              ? `${packageDisplaySize(p.weightUnit, p.basePackageSize, type)} kg bag`
+              : type === "liquid"
                 ? `${p.basePackageSize} ml bottle`
                 : "per piece";
 
