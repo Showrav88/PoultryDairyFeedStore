@@ -62,8 +62,6 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("shop-updated", onShopUpdated);
   }, []);
 
-  const brandTitle = shopName ?? t.app.name;
-
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -73,8 +71,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-[100dvh] bg-[var(--background)]">
       <aside className="hidden w-64 flex-shrink-0 border-r border-[var(--border)] bg-[var(--card)] md:flex md:flex-col">
         <div className="p-4 border-b border-[var(--border)]">
-          <h1 className="text-lg font-bold text-emerald-600">🐔 {brandTitle}</h1>
+          <h1 className="text-lg font-bold text-emerald-600">🐔 {t.app.name}</h1>
           <p className="text-xs text-[var(--muted)]">{t.app.tagline}</p>
+          {shopName && (
+            <p className="mt-2 truncate text-sm font-semibold text-[var(--foreground)]">
+              {shopName}
+            </p>
+          )}
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map(({ href, icon: Icon, key }) => (
@@ -135,8 +138,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <aside className="relative flex h-full w-[82%] max-w-xs flex-col bg-[var(--card)] pt-[env(safe-area-inset-top)] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
               <div>
-                <h1 className="font-bold text-emerald-600">🐔 {brandTitle}</h1>
+                <h1 className="font-bold text-emerald-600">🐔 {t.app.name}</h1>
                 <p className="text-xs text-[var(--muted)]">{t.app.tagline}</p>
+                {shopName && (
+                  <p className="mt-2 truncate text-sm font-semibold text-[var(--foreground)]">
+                    {shopName}
+                  </p>
+                )}
               </div>
               <button
                 className="flex min-h-11 min-w-11 items-center justify-center"
