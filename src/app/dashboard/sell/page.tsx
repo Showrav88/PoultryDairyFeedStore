@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ProductSellCard,
+  applyLastPricesToState,
   getDefaultProductState,
   resolveSellUnitSize,
   type ProductCardState,
@@ -145,16 +146,44 @@ function SellCounterContent() {
     return () => window.removeEventListener("focus", onFocus);
   }, [loadProducts]);
 
+  const preferWalkInDefault = !trackedBuyer;
+
   useEffect(() => {
     if (products.length === 0) return;
     setCardStates((prev) => {
-      const next: Record<string, ProductCardState> = {};
+      const next = { ...prev };
       for (const p of products) {
-        next[p.id] = getDefaultProductState(p, lastPriceMap);
+        if (!next[p.id]) {
+          next[p.id] = getDefaultProductState(p, lastPriceMap, preferWalkInDefault);
+        }
+      }
+      return next;
+    });
+  }, [products, preferWalkInDefault, lastPriceMap]);
+
+  useEffect(() => {
+    if (products.length === 0 || lastPriceMap.size === 0) return;
+    setCardStates((prev) => {
+      const next = { ...prev };
+      for (const p of products) {
+        if (next[p.id]) {
+          next[p.id] = applyLastPricesToState(p, next[p.id], lastPriceMap);
+        }
       }
       return next;
     });
   }, [lastPriceMap, products]);
+
+  useEffect(() => {
+    if (products.length === 0) return;
+    setCardStates(() => {
+      const next: Record<string, ProductCardState> = {};
+      for (const p of products) {
+        next[p.id] = getDefaultProductState(p, lastPriceMap, preferWalkInDefault);
+      }
+      return next;
+    });
+  }, [trackedBuyer?.type, trackedBuyer?.id, preferWalkInDefault]);
 
   const cartTotal = cart.reduce((s, i) => s + i.pricePerUnit * i.unitCount, 0);
 
@@ -166,8 +195,19 @@ function SellCounterContent() {
     });
   }, [cart, products]);
 
+  const scrollToCart = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 1279px)").matches) return;
+    document.getElementById("sell-cart-panel")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
+
   const addToCart = (product: SellProduct) => {
-    const state = cardStates[product.id] ?? getDefaultProductState(product, lastPriceMap);
+    const state =
+      cardStates[product.id] ??
+      getDefaultProductState(product, lastPriceMap, preferWalkInDefault);
     const unitSize = resolveSellUnitSize(state);
 
     if (
@@ -178,6 +218,7 @@ function SellCounterContent() {
         ...prev,
         [product.id]: t.sell.fullBagRequiresBuyer,
       }));
+      scrollToCart();
       return;
     }
 
@@ -219,6 +260,7 @@ function SellCounterContent() {
       return prev === cartTotal ? cartTotal + newLine : prev;
     });
     setCardErrors((prev) => ({ ...prev, [product.id]: "" }));
+    scrollToCart();
   };
 
   const completeSale = () => {
@@ -348,17 +390,20 @@ function SellCounterContent() {
         </div>
       )}
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        <div className="flex-1">
-          <p className="mb-3 text-sm text-gray-500">{t.sell.selectProductCards}</p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:gap-6">
+        <div className="order-2 flex-1 xl:order-1">
+          <p className="mb-2 text-sm text-gray-500 sm:mb-3">{t.sell.selectProductCards}</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 2xl:grid-cols-3">
             {products.map((p) => (
               <ProductSellCard
                 key={p.id}
                 product={p}
                 cart={cart}
                 lastPriceMap={lastPriceMap}
-                state={cardStates[p.id] ?? getDefaultProductState(p, lastPriceMap)}
+                state={
+                  cardStates[p.id] ??
+                  getDefaultProductState(p, lastPriceMap, preferWalkInDefault)
+                }
                 onStateChange={(state) =>
                   setCardStates((prev) => ({ ...prev, [p.id]: state }))
                 }
@@ -372,8 +417,10 @@ function SellCounterContent() {
           </div>
         </div>
 
-        <div className="w-full xl:w-96 xl:shrink-0">
+        <div className="order-1 w-full xl:order-2 xl:w-96 xl:shrink-0">
           <SellCartPanel
+            id="sell-cart-panel"
+            className="sticky top-14 z-20 max-h-[min(46vh,26rem)] overflow-y-auto shadow-md xl:top-4 xl:max-h-none xl:shadow-sm"
             cart={cart}
             onRemove={(idx) => {
               setCart(cart.filter((_, i) => i !== idx));

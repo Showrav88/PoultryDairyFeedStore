@@ -4,6 +4,7 @@ import {
   generateFeedAllowedSellUnits,
   getKhucraMaxGrams,
   getDefaultSellUnitSize,
+  getWalkInDefaultSellUnitSize,
   normalizeAllowedSellUnits,
   feedSellUnitsNeedSync,
 } from "./sell-units";
@@ -58,6 +59,10 @@ describe("buildSellUnitOptions", () => {
 
   it("defaults to full bag", () => {
     expect(getDefaultSellUnitSize(product50)).toBe(50000);
+  });
+
+  it("walk-in default prefers 1 kg khucra over full bag", () => {
+    expect(getWalkInDefaultSellUnitSize(product50)).toBe(1000);
   });
 });
 
