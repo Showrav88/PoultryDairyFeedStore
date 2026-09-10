@@ -59,10 +59,6 @@ export function validateSaleCheckout(params: {
     return "Due sales require buyer name and phone, or select a saved farmer/customer";
   }
 
-  if (cartHasFullBagLine(params.lines, productMap) && !tracked) {
-    return "Full bag sales require a tracked buyer (farmer, customer, or name + phone)";
-  }
-
   if (!tracked && dueAmount > 0.001) {
     return "Walk-in khucra sales must be paid in full — no due without buyer identity";
   }

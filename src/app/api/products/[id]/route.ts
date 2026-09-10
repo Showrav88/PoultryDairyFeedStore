@@ -5,6 +5,10 @@ import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { getInventorySummary } from "@/lib/inventory/khucra";
 import { formatStockDisplay, normalizeAllowedSellUnits } from "@/lib/inventory/sell-units";
+import {
+  detectProductType,
+  normalizeBasePackageSizeGrams,
+} from "@/lib/inventory/product-type";
 import { validateDefaultTpPrice } from "@/lib/pricing/tp-pricing";
 
 export async function GET(
@@ -86,17 +90,29 @@ export async function PATCH(
     }
 
     const weightUnit = data.weightUnit ?? existing.weightUnit;
-    const basePackageSize = data.basePackageSize ?? existing.basePackageSize;
-    const allowedSellUnits = normalizeAllowedSellUnits(
+    const rawBasePackageSize = data.basePackageSize ?? existing.basePackageSize;
+    const rawAllowedSellUnits = data.allowedSellUnits ?? existing.allowedSellUnits;
+    const basePackageSize = normalizeBasePackageSizeGrams(
       weightUnit,
+      rawBasePackageSize,
+      rawAllowedSellUnits
+    );
+    const effectiveWeightUnit =
+      detectProductType(weightUnit, basePackageSize, rawAllowedSellUnits) === "feed_bag"
+        ? "BAG"
+        : weightUnit;
+    const allowedSellUnits = normalizeAllowedSellUnits(
+      effectiveWeightUnit,
       basePackageSize,
-      data.allowedSellUnits ?? existing.allowedSellUnits
+      rawAllowedSellUnits
     );
 
     const product = await prisma.product.update({
       where: { id },
       data: {
         ...data,
+        weightUnit: effectiveWeightUnit,
+        basePackageSize,
         allowedSellUnits,
       },
     });

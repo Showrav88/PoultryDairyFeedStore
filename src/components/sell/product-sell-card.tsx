@@ -22,6 +22,7 @@ import {
   lastPriceKey,
   resolveUnitSellPrice,
 } from "@/lib/sell/last-price";
+import { resolveSellProductInput } from "@/lib/inventory/product-type";
 import {
   formatStockAmount,
   getAvailableStock,
@@ -79,12 +80,13 @@ export function resolveSellUnitSize(state: ProductCardState): number {
 function unitPriceFor(
   product: SellProduct,
   unitSize: number,
-  lastPriceMap?: Map<string, number>
+  lastPriceMap?: Map<string, number>,
+  sellProduct = resolveSellProductInput(product)
 ) {
   return resolveUnitSellPrice({
     referenceSellPrice: product.sellPrice,
     unitSize,
-    basePackageSize: product.basePackageSize,
+    basePackageSize: sellProduct.basePackageSize,
     lastPricePerUnit: lastPriceMap?.get(lastPriceKey(product.id, unitSize)),
   });
 }
@@ -94,11 +96,12 @@ export function getDefaultProductState(
   lastPriceMap?: Map<string, number>,
   preferWalkInDefault = false
 ): ProductCardState {
+  const sellProduct = resolveSellProductInput(product);
   const unitSize = preferWalkInDefault
-    ? getWalkInDefaultSellUnitSize(product)
-    : getDefaultSellUnitSize(product);
-  const customOptions = getCustomUnitOptions(product.weightUnit);
-  const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap);
+    ? getWalkInDefaultSellUnitSize(sellProduct)
+    : getDefaultSellUnitSize(sellProduct);
+  const customOptions = getCustomUnitOptions(sellProduct.weightUnit);
+  const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap, sellProduct);
   return {
     mode: "preset",
     unitSize,
@@ -115,12 +118,13 @@ export function applyLastPricesToState(
   lastPriceMap?: Map<string, number>
 ): ProductCardState {
   const unitSize = resolveSellUnitSize(state);
-  const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap);
+  const sellProduct = resolveSellProductInput(product);
+  const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap, sellProduct);
   return { ...state, pricePerUnit };
 }
 
 export function getSellUnitOptions(product: SellProduct): number[] {
-  return buildSellUnitOptions(product);
+  return buildSellUnitOptions(resolveSellProductInput(product));
 }
 
 export function ProductSellCard({
@@ -134,14 +138,15 @@ export function ProductSellCard({
   onStockError,
 }: ProductSellCardProps) {
   const { t } = useI18n();
+  const sellProduct = useMemo(() => resolveSellProductInput(product), [product]);
   const unitOptions = useMemo(() => getSellUnitOptions(product), [product]);
   const customUnitOptions = useMemo(
-    () => getCustomUnitOptions(product.weightUnit),
-    [product.weightUnit]
+    () => getCustomUnitOptions(sellProduct.weightUnit),
+    [sellProduct.weightUnit]
   );
 
   const effectiveUnitSize = resolveSellUnitSize(state);
-  const pricing = unitPriceFor(product, effectiveUnitSize, lastPriceMap);
+  const pricing = unitPriceFor(product, effectiveUnitSize, lastPriceMap, sellProduct);
   const lastForUnit = lastPriceMap?.get(lastPriceKey(product.id, effectiveUnitSize));
   const showBelowSuggested = isBelowSuggested(state.pricePerUnit, pricing.suggestedPricePerUnit);
   const showBelowCost = isBelowCost(
@@ -155,7 +160,7 @@ export function ProductSellCard({
     effectiveUnitSize > 0 ? Math.max(1, Math.floor(available / effectiveUnitSize)) : 1;
 
   const selectUnit = (unitSize: number) => {
-    const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap);
+    const { pricePerUnit } = unitPriceFor(product, unitSize, lastPriceMap, sellProduct);
     onStateChange({
       ...state,
       mode: "preset",
@@ -173,8 +178,9 @@ export function ProductSellCard({
         : parseCustomSellAmount(state.customAmount, state.customUnit);
     const { pricePerUnit } = unitPriceFor(
       product,
-      unitSize > 0 ? unitSize : product.basePackageSize,
-      lastPriceMap
+      unitSize > 0 ? unitSize : sellProduct.basePackageSize,
+      lastPriceMap,
+      sellProduct
     );
     onStateChange({
       ...state,
@@ -188,7 +194,7 @@ export function ProductSellCard({
   const updateCustom = (customAmount: number, customUnit: CustomSellUnit) => {
     const unitSize = parseCustomSellAmount(customAmount, customUnit);
     const { pricePerUnit } =
-      unitSize > 0 ? unitPriceFor(product, unitSize, lastPriceMap) : { pricePerUnit: 0 };
+      unitSize > 0 ? unitPriceFor(product, unitSize, lastPriceMap, sellProduct) : { pricePerUnit: 0 };
     onStateChange({
       ...state,
       mode: "custom",
@@ -278,7 +284,7 @@ export function ProductSellCard({
                 : "border-gray-300 dark:border-gray-600"
             }`}
           >
-            {formatSellUnitLabel(u, product.weightUnit, product.basePackageSize)}
+            {formatSellUnitLabel(u, sellProduct.weightUnit, sellProduct.basePackageSize)}
           </button>
         ))}
         <button
@@ -372,7 +378,7 @@ export function ProductSellCard({
 
       {state.mode === "custom" && effectiveUnitSize > 0 && (
         <p className="mb-2 text-xs text-gray-500">
-          {formatSellUnitLabel(effectiveUnitSize, product.weightUnit, product.basePackageSize)}
+          {formatSellUnitLabel(effectiveUnitSize, sellProduct.weightUnit, sellProduct.basePackageSize)}
         </p>
       )}
 
