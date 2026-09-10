@@ -8,6 +8,7 @@ import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { cn, formatCurrency } from "@/lib/utils";
+import { ListRowSkeleton } from "@/components/ui/skeleton";
 
 interface Farmer {
   id: string;
@@ -63,14 +64,17 @@ export default function FarmersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", address: "", openingDue: 0 });
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
   const [collectFarmerId, setCollectFarmerId] = useState<string | null>(null);
   const [collectAmount, setCollectAmount] = useState(0);
 
   const load = (q?: string) => {
     const params = q ? `?q=${encodeURIComponent(q)}` : "";
-    fetch(`/api/farmers${params}`)
+    setListLoading(true);
+    fetch(`/api/farmers${params}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => setFarmers(d.farmers ?? []));
+      .then((d) => setFarmers(d.farmers ?? []))
+      .finally(() => setListLoading(false));
   };
 
   useEffect(() => { load(); }, []);
@@ -205,6 +209,10 @@ export default function FarmersPage() {
       )}
 
       <div className="space-y-2">
+        {listLoading ? (
+          <ListRowSkeleton rows={6} />
+        ) : (
+          <>
         {sorted.map((f) => (
           <div
             key={f.id}
@@ -268,6 +276,8 @@ export default function FarmersPage() {
           </div>
         ))}
         {sorted.length === 0 && <p className="text-center text-gray-500 py-8">{t.common.noData}</p>}
+          </>
+        )}
       </div>
 
       {collectFarmerId && (

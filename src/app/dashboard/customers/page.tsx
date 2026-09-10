@@ -8,6 +8,7 @@ import { Input, Label, NumberInput } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useI18n } from "@/lib/i18n/context";
 import { cn, formatCurrency } from "@/lib/utils";
+import { ListRowSkeleton } from "@/components/ui/skeleton";
 
 interface CustomerRow {
   id: string;
@@ -42,14 +43,17 @@ export default function CustomersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", phone: "" });
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
   const [collectId, setCollectId] = useState<string | null>(null);
   const [collectAmount, setCollectAmount] = useState(0);
 
   const load = (q?: string) => {
     const params = q ? `?q=${encodeURIComponent(q)}` : "";
-    fetch(`/api/customers${params}`)
+    setListLoading(true);
+    fetch(`/api/customers${params}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => setCustomers(d.customers ?? []));
+      .then((d) => setCustomers(d.customers ?? []))
+      .finally(() => setListLoading(false));
   };
 
   useEffect(() => {
@@ -193,6 +197,10 @@ export default function CustomersPage() {
       )}
 
       <div className="space-y-2">
+        {listLoading ? (
+          <ListRowSkeleton rows={6} />
+        ) : (
+          <>
         {sorted.map((c) => (
           <div
             key={c.id}
@@ -247,6 +255,8 @@ export default function CustomersPage() {
         ))}
         {sorted.length === 0 && (
           <p className="py-8 text-center text-gray-500">{t.common.noData}</p>
+        )}
+          </>
         )}
       </div>
 

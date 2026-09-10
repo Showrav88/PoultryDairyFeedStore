@@ -5,6 +5,8 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, NumberInput, Select } from "@/components/ui/input";
 import { ConfirmDialog, useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { AnimatedCurrency } from "@/components/ui/animated-number";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/context";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
@@ -33,11 +35,18 @@ export default function WalletPage() {
   const [category, setCategory] = useState("OTHER");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
-  const load = () => fetch("/api/wallet").then((r) => r.json()).then((d) => {
-    setBalance(d.balance ?? 0);
-    setTransactions(d.transactions ?? []);
-  });
+  const load = () => {
+    setPageLoading(true);
+    fetch("/api/wallet", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        setBalance(d.balance ?? 0);
+        setTransactions(d.transactions ?? []);
+      })
+      .finally(() => setPageLoading(false));
+  };
 
   useEffect(() => { load(); }, []);
 
@@ -82,7 +91,11 @@ export default function WalletPage() {
 
       <div className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white mb-6">
         <p className="text-sm opacity-80">{t.wallet.balance}</p>
-        <p className="mt-1 break-words text-3xl font-bold sm:text-4xl">{formatCurrency(balance)}</p>
+        <AnimatedCurrency
+          value={balance}
+          loading={pageLoading}
+          className="mt-1 break-words text-3xl font-bold text-white sm:text-4xl"
+        />
       </div>
 
       <div className="flex gap-2 mb-6 flex-wrap">
@@ -132,6 +145,9 @@ export default function WalletPage() {
         </div>
       )}
 
+      {pageLoading ? (
+        <TableSkeleton rows={8} />
+      ) : (
       <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
         <table className="min-w-[760px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800">
@@ -170,6 +186,7 @@ export default function WalletPage() {
         </table>
         {transactions.length === 0 && <p className="text-center text-gray-500 py-8">{t.common.noData}</p>}
       </div>
+      )}
 
       <ConfirmDialog open={confirmState.open} message={confirmState.message} onConfirm={confirmState.onConfirm} onCancel={close} loading={loading} />
     </div>
