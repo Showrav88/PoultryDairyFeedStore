@@ -6,7 +6,7 @@ NEWPROJECT_APP_DIR="${NEWPROJECT_APP_DIR:-/var/www/NEWPROJECT}"
 NEWPROJECT_ROOT_LOCK="/var/lock/newproject-deploy.lock"
 NEWPROJECT_ROOT_PID="/var/lock/newproject-deploy.pid"
 NEWPROJECT_APP_LOCK="${NEWPROJECT_APP_DIR}/.deploy.lock"
-STALE_ACTIVE_SEC="${NEWPROJECT_STALE_ACTIVE_SEC:-180}"
+STALE_ACTIVE_SEC="${NEWPROJECT_STALE_ACTIVE_SEC:-45}"
 
 # True when a deploy process is actually running (not a stuck systemd unit alone).
 newproject_deploy_process_running() {
@@ -70,7 +70,7 @@ newproject_clear_stale_deploy_locks() {
   if newproject_deploy_process_running; then
     return 1
   fi
-  rm -f "$NEWPROJECT_ROOT_LOCK" "$NEWPROJECT_ROOT_PID" "$NEWPROJECT_APP_LOCK"
+  rm -f "$NEWPROJECT_ROOT_LOCK" "$NEWPROJECT_ROOT_PID" "$NEWPROJECT_APP_LOCK" "${NEWPROJECT_APP_DIR}/.deploy-in-progress"
   systemctl stop newproject-deploy.service 2>/dev/null || true
   systemctl reset-failed newproject-deploy.service 2>/dev/null || true
   newproject_clear_stale_deploy_status || true

@@ -31,7 +31,7 @@ git -C "$APP_DIR" fetch origin "$BRANCH"
 git -C "$APP_DIR" reset --hard "origin/${BRANCH}"
 git -C "$APP_DIR" clean -fd \
   -e .env -e .env.local -e node_modules -e .next -e logs \
-  -e .deploy-sha -e .deploy-status -e .deploy.lock -e src/generated
+  -e .deploy-sha -e .deploy-status -e .deploy.lock -e .deploy-in-progress -e src/generated
 
 # shellcheck disable=SC1091
 source "${APP_DIR}/deploy/deploy-lock.sh"
@@ -65,7 +65,14 @@ if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
     log "No change on origin/${BRANCH} and app at ${LIVE_SHA:0:7} — skip deploy"
     exit 0
   fi
-  log "Git already at ${REMOTE_SHA:0:7} but live app is ${LIVE_SHA:-unknown} — retry deploy"
+  if curl --fail --silent --max-time 8 http://127.0.0.1:5001/api/health >/dev/null 2>&1; then
+    SHORT_SHA="$(echo "$REMOTE_SHA" | cut -c1-7)"
+    echo "$SHORT_SHA" | sudo -u "$APP_USER" tee "${APP_DIR}/.deploy-sha" >/dev/null
+    rm -f "${APP_DIR}/.deploy-in-progress"
+    log "App healthy at git ${SHORT_SHA} — repaired .deploy-sha without redeploy"
+    exit 0
+  fi
+  log "Git already at ${REMOTE_SHA:0:7} but app unhealthy — retry deploy"
 else
   log "Change detected ${LOCAL_SHA:0:7} -> ${REMOTE_SHA:0:7} — running ${DEPLOY_CMD}"
 fi

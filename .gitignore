@@ -37,6 +37,7 @@ yarn-error.log*
 .deploy-sha
 .deploy-status
 .deploy.lock
+.deploy-in-progress
 
 # deploy logs (written on VPS under app dir)
 /logs/
