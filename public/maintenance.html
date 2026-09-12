@@ -33,6 +33,26 @@
     p { font-size: 0.95rem; line-height: 1.55; color: #166534; margin-bottom: 8px; }
     .muted { font-size: 0.85rem; color: #4ade80; margin-top: 16px; }
     .status { font-size: 0.8rem; color: #059669; margin-top: 12px; min-height: 1.2em; }
+    .actions { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 10px;
+      border: 1px solid #059669;
+      background: #059669;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn.secondary {
+      background: #fff;
+      color: #059669;
+    }
     .spinner {
       width: 40px; height: 40px; margin: 20px auto;
       border: 3px solid #bbf7d0; border-top-color: #059669;
@@ -48,23 +68,38 @@
     <p>We are deploying a new version. This usually takes <strong>a few minutes</strong>.</p>
     <p>This page checks automatically — you will be redirected when the app is ready.</p>
     <p class="status" id="status" role="status">Checking server…</p>
+    <div class="actions">
+      <button type="button" class="btn" id="openApp">Open app now</button>
+      <button type="button" class="btn secondary" id="hardRefresh">Hard refresh</button>
+    </div>
     <p class="muted">Your data is safe. Stock and accounts are unchanged during updates.</p>
   </div>
   <script>
     (function () {
       var statusEl = document.getElementById("status");
-      var pollMs = 3000;
+      var pollMs = 2500;
       var checks = 0;
+      var readyStreak = 0;
 
       function setStatus(msg) {
         if (statusEl) statusEl.textContent = msg;
       }
 
+      function clearServiceWorkers() {
+        if (!("serviceWorker" in navigator)) return Promise.resolve();
+        return navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+        }).catch(function () {});
+      }
+
       function appReady(data) {
-        if (!data || data.status !== "ok") return false;
+        if (!data) return false;
+        if (data.appReady === true) return true;
+        if (data.appReady === false) return false;
+        if (data.status !== "ok" || data.database !== "connected") return false;
         if (data.deployRunning === true) return false;
         var state = data.deployState || "";
-        if (state === "building" || state === "restarting" || state === "pulling" || state === "started") {
+        if (state === "building" || state === "restarting" || state === "pulling" || state === "started" || state === "running") {
           return false;
         }
         return true;
@@ -72,7 +107,9 @@
 
       function goHome() {
         setStatus("Ready — opening app…");
-        window.location.replace("/?_=" + Date.now());
+        clearServiceWorkers().finally(function () {
+          window.location.replace("/?_=" + Date.now());
+        });
       }
 
       async function checkHealth() {
@@ -89,29 +126,52 @@
             if (ct.indexOf("application/json") !== -1) {
               var data = await res.json();
               if (appReady(data)) {
-                goHome();
-                return;
-              }
-              if (data.deployRunning || data.deployState === "building" || data.deployState === "restarting") {
-                setStatus("Build in progress…");
+                readyStreak += 1;
+                if (readyStreak >= 2) {
+                  goHome();
+                  return;
+                }
+                setStatus("App is ready — opening…");
               } else {
-                setStatus("Server responding — finishing up…");
+                readyStreak = 0;
+                if (data.deployRunning || data.deployState === "building" || data.deployState === "restarting") {
+                  setStatus("Build in progress…");
+                } else if (data.status === "ok") {
+                  setStatus("Server responding — finishing up…");
+                } else {
+                  setStatus("Waiting for app…");
+                }
               }
             } else {
+              readyStreak = 0;
               setStatus("Waiting for app…");
             }
           } else if (res.status === 502 || res.status === 503) {
+            readyStreak = 0;
             setStatus("App is restarting…");
           } else {
+            readyStreak = 0;
             setStatus("Checking again…");
           }
         } catch (e) {
+          readyStreak = 0;
           setStatus(checks <= 2 ? "App is restarting…" : "Still updating — retrying…");
         }
 
         setTimeout(checkHealth, pollMs);
       }
 
+      document.getElementById("openApp").addEventListener("click", function () {
+        goHome();
+      });
+
+      document.getElementById("hardRefresh").addEventListener("click", function () {
+        clearServiceWorkers().finally(function () {
+          window.location.reload(true);
+        });
+      });
+
+      clearServiceWorkers();
       checkHealth();
     })();
   </script>

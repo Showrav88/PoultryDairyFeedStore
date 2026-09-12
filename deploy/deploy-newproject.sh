@@ -8,6 +8,7 @@ LOCK_FILE="/var/lock/newproject-deploy.lock"
 PID_FILE="/var/lock/newproject-deploy.pid"
 LOG_FILE="/var/log/newproject-deploy.log"
 STATUS_FILE="${APP_DIR}/.deploy-status"
+DEPLOY_FLAG="${APP_DIR}/.deploy-in-progress"
 SBIN_CMD="/usr/local/sbin/deploy-newproject"
 REPO_SCRIPT="${APP_DIR}/deploy/deploy-newproject.sh"
 
@@ -20,6 +21,15 @@ write_status() {
   printf '{"state":"%s","sha":"%s","message":"%s","updatedAt":"%s"}\n' \
     "$state" "$sha" "$msg" "$(date -Is)" > "$STATUS_FILE"
   chown newproject:newproject "$STATUS_FILE" 2>/dev/null || true
+}
+
+mark_deploy_active() {
+  touch "$DEPLOY_FLAG"
+  chown newproject:newproject "$DEPLOY_FLAG" 2>/dev/null || true
+}
+
+mark_deploy_inactive() {
+  rm -f "$DEPLOY_FLAG"
 }
 
 fix_app_ownership() {
@@ -63,12 +73,14 @@ git_pull_latest() {
 on_error() {
   echo "Deploy failed at line $1 (exit $2)"
   write_status "failed" "$(cat "${APP_DIR}/.deploy-sha" 2>/dev/null || echo "")" "Deploy failed at line $1"
+  mark_deploy_inactive
   rm -f "$PID_FILE"
   exit "$2"
 }
 trap 'on_error $LINENO $?' ERR
 
 cleanup() {
+  mark_deploy_inactive
   rm -f "$PID_FILE"
 }
 trap cleanup EXIT
@@ -154,6 +166,7 @@ fi
 
 echo "=== Deploy started $(date -Is) ==="
 write_status "started" "" "Deploy started"
+mark_deploy_active
 
 fix_app_ownership
 git_pull_latest
@@ -187,6 +200,7 @@ for attempt in {1..60}; do
     SHA="$(sudo -u "${APP_USER}" git -C "$APP_DIR" rev-parse --short HEAD)"
     echo "$SHA" | sudo -u newproject tee "$APP_DIR/.deploy-sha" >/dev/null
     write_status "ready" "$SHA" "Deployment healthy"
+    mark_deploy_inactive
     echo "Deployment healthy: $SHA"
     if [[ "$(id -u)" -eq 0 && -f /etc/nginx/sites-available/newproject ]]; then
       nginx -t && systemctl reload nginx
@@ -203,4 +217,5 @@ systemctl status newproject-api.service --no-pager || true
 echo "Recent service logs:"
 journalctl -u newproject-api.service -n 80 --no-pager
 write_status "failed" "$DEPLOYING_SHA" "Health check failed after restart"
+mark_deploy_inactive
 exit 1
